@@ -1,0 +1,881 @@
+/*
+ * This software is in the public domain under CC0 1.0 Universal plus a
+ * Grant of Patent License.
+ * 
+ * To the extent possible under law, the author(s) have dedicated all
+ * copyright and related and neighboring rights to this software to the
+ * public domain worldwide. This software is distributed without any
+ * warranty.
+ * 
+ * You should have received a copy of the CC0 Public Domain Dedication
+ * along with this software (see the LICENSE.md file). If not, see
+ * <http://creativecommons.org/publicdomain/zero/1.0/>.
+ */
+
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Array;
+import java.lang.reflect.Method;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.CodeSource;
+import java.security.ProtectionDomain;
+import java.security.cert.Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
+
+/** This start class implements a ClassLoader and supports loading jars within a jar or war file in order to facilitate
+ * an executable war file. To do this it overrides the findResource, findResources, and loadClass methods of the
+ * ClassLoader class.
+ *
+ * The best source for research on the topic seems to be at http://www.jdotsoft.com, with a lot of good comments in the
+ * JarClassLoader source file there.
+ */
+public class MoquiStart {
+    // this default is for development and is here instead of having a buried properties file that might cause conflicts when trying to override
+    private static final String defaultConf = "conf/MoquiDevConf.xml";
+    private static final String tempDirName = "execwartmp";
+    private static final boolean reportJarsUnused = Boolean.valueOf(System.getProperty("report.jars.unused", "false"));
+    // private final static boolean reportJarsUnused = true;
+
+    public static void main(String[] args) throws IOException {
+        // now grab the first arg and see if it is a known command
+        String firstArg = args.length > 0 ? args[0] : "";
+
+        // make a list of arguments
+        List<String> argList = Arrays.asList(args);
+        Map<String, String> argMap = new LinkedHashMap<>();
+        for (String arg: argList) {
+            // run twice to allow one or two dashes
+            if (arg.startsWith("-")) arg = arg.substring(1);
+            if (arg.startsWith("-")) arg = arg.substring(1);
+            if (arg.contains("=")) {
+                argMap.put(arg.substring(0, arg.indexOf("=")), arg.substring(arg.indexOf("=")+1));
+            } else {
+                argMap.put(arg, "");
+            }
+        }
+
+        if (firstArg.endsWith("help") || "-?".equals(firstArg)) {
+            // setup the class loader
+            StartClassLoader moquiStartLoader = new StartClassLoader(true);
+            Thread.currentThread().setContextClassLoader(moquiStartLoader);
+            Runtime.getRuntime().addShutdownHook(new MoquiShutdown(null, null, moquiStartLoader));
+            initSystemProperties(moquiStartLoader, false, argMap);
+
+            /* nice for debugging, messy otherwise:
+            System.out.println("Internal Class Path Jars:");
+            for (JarFile jf: moquiStartLoader.jarFileList) {
+                String fn = jf.getName();
+                System.out.println(fn.contains("moqui_temp") ? fn.substring(fn.indexOf("moqui_temp")) : fn);
+            }
+            */
+            System.out.println("------------------------------------------------");
+            System.out.println("Current runtime directory (moqui.runtime): " + System.getProperty("moqui.runtime"));
+            System.out.println("Current configuration file (moqui.conf): " + System.getProperty("moqui.conf"));
+            System.out.println("To set these properties use something like: java -Dmoqui.conf=conf/MoquiProductionConf.xml -jar moqui.war ...");
+            System.out.println("------------------------------------------------");
+            System.out.println("Executable WAR : java -jar moqui.war [command] [arguments]");
+            System.out.println("Expanded WAR   : java -cp . MoquiStart [command] [arguments]");
+            System.out.println("help, -? ---- Help (this text)");
+            System.out.println("load -------- Run data loader");
+            System.out.println("    types=<type>[,<type>] ------- Data types to load (can be anything, common are: seed, seed-initial, install, demo, ...)");
+            System.out.println("    components=<name>[,<name>] -- Component names to load for data types; if none specified loads from all");
+            System.out.println("    location=<location> --------- Location of data file to load");
+            System.out.println("    timeout=<seconds> ----------- Transaction timeout for each file, defaults to 600 seconds (10 minutes)");
+            System.out.println("    no-fk-create ---------------- Don't create foreign-keys, for empty database to avoid referential integrity errors");
+            System.out.println("    dummy-fks ------------------- Use dummy foreign-keys to avoid referential integrity errors");
+            System.out.println("    use-try-insert -------------- Try insert and update on error instead of checking for record first");
+            System.out.println("    disable-eeca ---------------- Disable Entity ECA rules");
+            System.out.println("    disable-audit-log ----------- Disable Entity Audit Log");
+            System.out.println("    disable-data-feed ----------- Disable Entity DataFeed");
+            System.out.println("    raw ------------------------- For raw data load to an empty database; short for no-fk-create, use-try-insert, disable-eeca, disable-audit-log, disable-data-feed");
+            System.out.println("    conf=<moqui.conf> ----------- The Moqui Conf XML file to use, overrides other ways of specifying it");
+            System.out.println("    no-run-es ------------------- Don't Try starting and stopping ElasticSearch in runtime/elasticsearch");
+            System.out.println("    If no -types or -location argument is used all known data files of all types will be loaded.");
+            System.out.println("[default] ---- Run embedded Jetty server");
+            System.out.println("    port=<port> ---------------- The http listening port. Default is 8080");
+            System.out.println("    threads=<max threads> ------ Maximum number of threads. Default is 100");
+            System.out.println("    conf=<moqui.conf> ---------- The Moqui Conf XML file to use, overrides other ways of specifying it");
+            System.out.println("    no-run-es ------------------- Don't Try starting and stopping OpenSearch in runtime/opensearch or ElasticSearch in runtime/elasticsearch");
+            System.out.println("");
+            System.exit(0);
+        }
+
+        boolean isInWar = true;
+        try {
+            ProtectionDomain pd = MoquiStart.class.getProtectionDomain();
+            CodeSource cs = pd.getCodeSource();
+            URL wrapperUrl = cs.getLocation();
+            File wrapperFile = new File(wrapperUrl.toURI());
+            if (wrapperFile.isDirectory()) isInWar = false;
+            /* to accommodate an executable start.jar file inside the executable WAR file:
+            if (isInWar && wrapperFile.getName().equals("start.jar")) {
+                isInWar = false;
+                // wrapperFile = wrapperFile.getParentFile();
+            }
+            */
+        } catch (Exception e) {
+            System.out.println("Error checking class wrapper: " + e.toString());
+        }
+
+        // if doing anything other than help make sure temp dir deleted
+        if (isInWar) {
+            File tempDir = new File(tempDirName);
+            System.out.println("Using temporary directory: " + tempDir.getCanonicalPath());
+            if (tempDir.exists()) {
+                System.out.println("Found temporary directory " + tempDirName + ", deleting");
+                try {
+                    Files.walk(tempDir.toPath())
+                            .sorted(Comparator.reverseOrder())
+                            .map(Path::toFile)
+                            .forEach(File::delete);
+                } catch (IOException e) {
+                    System.out.println("Error deleting temp directory " + tempDirName + ": " + e);
+                }
+            }
+        }
+
+        // run load if is first argument
+        if (firstArg.endsWith("load")) {
+            StartClassLoader moquiStartLoader = new StartClassLoader(true);
+            Thread.currentThread().setContextClassLoader(moquiStartLoader);
+            // Runtime.getRuntime().addShutdownHook(new MoquiShutdown(null, null, moquiStartLoader));
+            initSystemProperties(moquiStartLoader, false, argMap);
+            Process esProcess = argMap.containsKey("no-run-es") ? null : checkStartElasticSearch();
+
+            boolean successfullLoad = true;
+            try {
+                System.out.println("Loading data with args " + argMap);
+                Class<?> c = moquiStartLoader.loadClass("org.moqui.Moqui");
+                Method m = c.getMethod("loadData", Map.class);
+                m.invoke(null, argMap);
+            } catch (Throwable e) {
+                successfullLoad = false;
+                System.out.println("Error loading or running Moqui.loadData with args [" + argMap + "]: " + e.toString());
+                e.printStackTrace();
+            } finally {
+                checkStopElasticSearch(esProcess);
+                System.exit(successfullLoad ? 0 : 1);
+            }
+        }
+
+        // ===== Done trying specific commands, so load the embedded server
+
+        // Get a start loader with loadWebInf=false since the container will load those we don't want to here (would be on classpath twice)
+        // NOTE DEJ20210520: now always using StartClassLoader because of breaking classloader changes in 9.4.37 (likely from https://github.com/eclipse/jetty.project/pull/5894)
+        StartClassLoader moquiStartLoader = new StartClassLoader(true);
+        Thread.currentThread().setContextClassLoader(moquiStartLoader);
+
+        // NOTE: not using MoquiShutdown hook any more, let Jetty stop everything
+        //   may need to add back for jar file close, cleaner delete on exit
+        // Thread shutdownHook = new MoquiShutdown(null, null, moquiStartLoader);
+        // shutdownHook.setDaemon(true);
+        // Runtime.getRuntime().addShutdownHook(shutdownHook);
+
+        initSystemProperties(moquiStartLoader, false, argMap);
+        String runtimePath = System.getProperty("moqui.runtime");
+
+        Process esProcess = argMap.containsKey("no-run-es") ? null : checkStartElasticSearch();
+        if (esProcess != null) {
+            Thread shutdownHook = new ElasticShutdown(esProcess);
+            shutdownHook.setDaemon(true);
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
+        }
+
+        try {
+            int port = 8080;
+            String portStr = argMap.get("port");
+            if (portStr != null && portStr.length() > 0) port = Integer.parseInt(portStr);
+            int threads = 100;
+            String threadsStr = argMap.get("threads");
+            if (threadsStr != null && threadsStr.length() > 0) threads = Integer.parseInt(threadsStr);
+
+            System.out.println("Running Jetty server on port " + port + " max threads " + threads + " with args [" + argMap + "]");
+
+            Class<?> serverClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.Server");
+            Class<?> handlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.Handler");
+            Class<?> sizedThreadPoolClass = moquiStartLoader.loadClass("org.eclipse.jetty.util.thread.ThreadPool$SizedThreadPool");
+
+            Class<?> httpConfigurationClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.HttpConfiguration");
+            Class<?> forwardedRequestCustomizerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.ForwardedRequestCustomizer");
+            Class<?> customizerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.HttpConfiguration$Customizer");
+
+            Class<?> sessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionIdManager");
+            Class<?> sessionManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionManager");
+            Class<?> sessionHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.servlet.SessionHandler");
+            Class<?> defaultSessionIdManagerClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionIdManager");
+            Class<?> sessionCacheClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionCache");
+            Class<?> sessionCacheFactoryClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.DefaultSessionCacheFactory");
+            Class<?> sessionDataStoreClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.SessionDataStore");
+            Class<?> fileSessionDataStoreClass = moquiStartLoader.loadClass("org.eclipse.jetty.session.FileSessionDataStore");
+
+            Class<?> connectorClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.Connector");
+            Class<?> serverConnectorClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.ServerConnector");
+            Class<?> webappClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.webapp.WebAppContext");
+
+            Class<?> connectionFactoryClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.ConnectionFactory");
+            Class<?> connectionFactoryArrayClass = Array.newInstance(connectionFactoryClass, 1).getClass();
+            Class<?> httpConnectionFactoryClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.HttpConnectionFactory");
+
+            Class<?> scHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.servlet.ServletContextHandler");
+            Class<?> wsInitializerClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer");
+            Class<?> wsInitializerConfiguratorClass = moquiStartLoader.loadClass("org.eclipse.jetty.ee11.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer$Configurator");
+
+            Class<?> gzipHandlerClass = moquiStartLoader.loadClass("org.eclipse.jetty.server.handler.gzip.GzipHandler");
+
+            Object server = serverClass.getConstructor().newInstance();
+            Object httpConfig = httpConfigurationClass.getConstructor().newInstance();
+
+            // add ForwardedRequestCustomizer to handle Forwarded and X-Forwarded-* HTTP Request Headers
+            // see https://javadoc.jetty.org/jetty-12.1/org/eclipse/jetty/server/ForwardedRequestCustomizer.html
+            // NOTE: this is the only way Jetty knows about HTTPS/SSL so is needed, but the problem is these headers
+            //     are easily spoofed; this isn't too bad for X-Proxied-Https and X-Forwarded-Proto, and those are needed
+            // TODO: at least find some way to skip X-Forwarded-For: current behavior with new client-ip-header setting
+            //     is it will use that but if no client IP found that way it gets it from Jetty, which gets it from X-Forwarded-For, opening to spoofing
+            Object forwardedRequestCustomizer = forwardedRequestCustomizerClass.getConstructor().newInstance();
+            httpConfigurationClass.getMethod("addCustomizer", customizerClass).invoke(httpConfig, forwardedRequestCustomizer);
+
+            Object httpConnectionFactory = httpConnectionFactoryClass.getConstructor(httpConfigurationClass).newInstance(httpConfig);
+            Object connectionFactoryArray = Array.newInstance(connectionFactoryClass, 1);
+            Array.set(connectionFactoryArray, 0, httpConnectionFactory);
+            Object httpConnector = serverConnectorClass.getConstructor(serverClass, connectionFactoryArrayClass).newInstance(server, connectionFactoryArray);
+            serverConnectorClass.getMethod("setPort", int.class).invoke(httpConnector, port);
+
+            serverClass.getMethod("addConnector", connectorClass).invoke(server, httpConnector);
+
+            // SessionDataStore
+            File storeDir = new File(runtimePath + "/sessions");
+            if (!storeDir.exists()) storeDir.mkdirs();
+            System.out.println("Creating Jetty FileSessionDataStore with directory " + storeDir.getCanonicalPath());
+            Object sessionHandler = sessionHandlerClass.getConstructor().newInstance();
+            sessionHandlerClass.getMethod("setServer", serverClass).invoke(sessionHandler, server);
+            Object sessionCacheFactory = sessionCacheFactoryClass.getConstructor().newInstance();
+            Object sessionCache = sessionCacheFactoryClass.getMethod("newSessionCache", sessionManagerClass).invoke(sessionCacheFactory, sessionHandler);
+            Object sessionDataStore = fileSessionDataStoreClass.getConstructor().newInstance();
+            fileSessionDataStoreClass.getMethod("setStoreDir", File.class).invoke(sessionDataStore, storeDir);
+            fileSessionDataStoreClass.getMethod("setDeleteUnrestorableFiles", boolean.class).invoke(sessionDataStore, true);
+            sessionCacheClass.getMethod("setSessionDataStore", sessionDataStoreClass).invoke(sessionCache, sessionDataStore);
+            sessionHandlerClass.getMethod("setSessionCache", sessionCacheClass).invoke(sessionHandler, sessionCache);
+            Object sidMgr = defaultSessionIdManagerClass.getConstructor(serverClass).newInstance(server);
+            defaultSessionIdManagerClass.getMethod("setServer", serverClass).invoke(sidMgr, server);
+            sessionHandlerClass.getMethod("setSessionIdManager", sessionIdManagerClass).invoke(sessionHandler, sidMgr);
+            serverClass.getMethod("addBean", Object.class).invoke(server, sidMgr);
+
+            // WebApp
+            Object webapp = webappClass.getConstructor().newInstance();
+
+            webappClass.getMethod("setContextPath", String.class).invoke(webapp, "/");
+            webappClass.getMethod("setServer", serverClass).invoke(webapp, server);
+            webappClass.getMethod("setSessionHandler", sessionHandlerClass).invoke(webapp, sessionHandler);
+            webappClass.getMethod("setMaxFormKeys", int.class).invoke(webapp, 5000);
+            if (isInWar) {
+                webappClass.getMethod("setWar", String.class).invoke(webapp, moquiStartLoader.wrapperUrl.toExternalForm());
+                webappClass.getMethod("setTempDirectory", File.class).invoke(webapp, new File(tempDirName + "/ROOT"));
+            } else {
+                webappClass.getMethod("setBaseResourceAsString", String.class).invoke(webapp, moquiStartLoader.wrapperUrl.toExternalForm());
+            }
+            webappClass.getMethod("setClassLoader", ClassLoader.class).invoke(webapp, moquiStartLoader);
+
+            // handle webapp_session_cookie_max_age with setInitParameter (1209600 seconds is about 2 weeks 60 * 60 * 24 * 14)
+            String sessionMaxAge = System.getenv("webapp_session_cookie_max_age");
+            if (sessionMaxAge != null && !sessionMaxAge.isEmpty()) {
+                Integer maxAgeInt = null;
+                try { maxAgeInt = Integer.parseInt(sessionMaxAge); }
+                catch (Exception e) { System.out.println("Found webapp_session_cookie_max_age env var with invalid number, ignoring: " + sessionMaxAge); }
+
+                if (maxAgeInt != null) {
+                    System.out.println("Setting Servlet Session Max Age based on webapp_session_cookie_max_age " + maxAgeInt);
+                    webappClass.getMethod("setInitParameter", String.class, String.class)
+                            .invoke(webapp, "org.eclipse.jetty.servlet.MaxAge", maxAgeInt.toString());
+                }
+            }
+
+            // WebSocket
+            Object wsContainer = wsInitializerClass.getMethod("configure", scHandlerClass, wsInitializerConfiguratorClass).invoke(null, webapp, null);
+            webappClass.getMethod("setAttribute", String.class, Object.class).invoke(webapp, "jakarta.websocket.server.ServerContainer", wsContainer);
+
+            // GzipHandler
+            Object gzipHandler = gzipHandlerClass.getConstructor().newInstance();
+            // use defaults, should include all except certain excludes:
+            // gzipHandlerClass.getMethod("setIncludedMimeTypes", String[].class).invoke(gzipHandler, new Object[] { new String[] {"text/html", "text/plain", "text/xml", "text/css", "application/javascript", "text/javascript"} });
+            gzipHandlerClass.getMethod("setHandler", handlerClass).invoke(gzipHandler, webapp);
+            serverClass.getMethod("setHandler", handlerClass).invoke(server, gzipHandler);
+
+            // Log getMinThreads, getMaxThreads
+            Object threadPool = serverClass.getMethod("getThreadPool").invoke(server);
+            sizedThreadPoolClass.getMethod("setMaxThreads", int.class).invoke(threadPool, threads);
+            int minThreads = (int) sizedThreadPoolClass.getMethod("getMinThreads").invoke(threadPool);
+            int maxThreads = (int) sizedThreadPoolClass.getMethod("getMaxThreads").invoke(threadPool);
+            System.out.println("Jetty min threads " + minThreads + ", max threads " + maxThreads);
+
+            // Tell Jetty to stop on JVM shutdown
+            serverClass.getMethod("setStopAtShutdown", boolean.class).invoke(server, true);
+            serverClass.getMethod("setStopTimeout", long.class).invoke(server, 30000L);
+
+            // Start
+            serverClass.getMethod("start").invoke(server);
+            serverClass.getMethod("join").invoke(server);
+
+            /*
+               Jetty 12 / Jakarta EE 11 notes:
+               - SessionIdManager is server-scoped and must be registered as a Server bean.
+               - SessionHandler discovers the SessionIdManager automatically.
+               - Handler hierarchy:
+                 Server
+                  └── GzipHandler
+                      └── WebAppContext
+                          └── SessionHandler
+
+            The classpath dependent code we are running:
+
+            Server server = new Server();
+            HttpConfiguration httpConfig = new HttpConfiguration();
+            httpConfig.addCustomizer(new ForwardedRequestCustomizer());
+            HttpConnectionFactory httpConnectionFactory = new HttpConnectionFactory(httpConfig);
+            ServerConnector httpConnector = new ServerConnector(server, httpConnectionFactory);
+            httpConnector.setPort(port);
+            server.addConnector(httpConnector);
+            File storeDir = new File(runtimePath + "/sessions");
+            storeDir.mkdirs();
+            SessionHandler sessionHandler = new SessionHandler();
+            sessionHandler.setServer(server);
+            DefaultSessionCacheFactory sessionCacheFactory = new DefaultSessionCacheFactory();
+            SessionCache sessionCache = sessionCacheFactory.newSessionCache(sessionHandler);
+            FileSessionDataStore sessionDataStore = new FileSessionDataStore();
+            sessionDataStore.setStoreDir(storeDir);
+            sessionDataStore.setDeleteUnrestorableFiles(true);
+            sessionCache.setSessionDataStore(sessionDataStore);
+            sessionHandler.setSessionCache(sessionCache);
+            SessionIdManager sessionIdManager = new DefaultSessionIdManager(server);
+            server.addBean(sessionIdManager);
+            sessionHandler.setSessionIdManager(sessionIdManager);
+            WebAppContext webapp = new WebAppContext();
+            webapp.setContextPath("/");
+            webapp.setServer(server);
+            webapp.setSessionHandler(sessionHandler);
+            webapp.setMaxFormKeys(5000);
+            if (isInWar) {
+                webapp.setWar(moquiStartLoader.wrapperUrl.toExternalForm());
+                webapp.setTempDirectory(new File("execwartmp/ROOT"));
+            } else {
+                webapp.setBaseResourceAsString(moquiStartLoader.wrapperUrl.toExternalForm());
+            }
+            webapp.setClassLoader(moquiStartLoader);
+            String sessionMaxAge = System.getenv("webapp_session_cookie_max_age");
+            if (sessionMaxAge != null && !sessionMaxAge.isEmpty()) {
+                try {
+                    Integer maxAgeInt = Integer.parseInt(sessionMaxAge);
+                    webapp.setInitParameter("org.eclipse.jetty.servlet.MaxAge", maxAgeInt.toString());
+                } catch (Exception ignored) {}
+            }
+            ServerContainer wsContainer = JakartaWebSocketServletContainerInitializer.configure(webapp, null);
+            webapp.setAttribute("jakarta.websocket.server.ServerContainer", wsContainer);
+            GzipHandler gzipHandler = new GzipHandler();
+            gzipHandler.setHandler(webapp);
+            server.setHandler(gzipHandler);
+            ThreadPool.SizedThreadPool threadPool = (ThreadPool.SizedThreadPool) server.getThreadPool();
+            threadPool.setMaxThreads(threads);
+            server.setStopAtShutdown(true);
+            server.setStopTimeout(30000L);
+            server.start();
+            // The use of server.join() the will make the current thread join and
+            // wait until the server is done executing.
+            // See http://docs.oracle.com/javase/7/docs/api/java/lang/Thread.html#join()
+            server.join();
+            */
+        } catch (Exception e) {
+            System.out.println("Error loading or running Jetty embedded server with args [" + argMap + "]: " + e.toString());
+            e.printStackTrace();
+        }
+
+        // now wait for break...
+    }
+
+    private static void initSystemProperties(StartClassLoader cl, boolean useProperties, Map<String, String> argMap) throws IOException {
+        Properties moquiInitProperties = null;
+        if (useProperties) {
+            moquiInitProperties = new Properties();
+            URL initProps = cl.getResource("MoquiInit.properties");
+            if (initProps != null) { InputStream is = initProps.openStream(); moquiInitProperties.load(is); is.close(); }
+        }
+
+        // before doing anything else make sure the moqui.runtime system property exists (needed for config of various things)
+        String runtimePath = System.getProperty("moqui.runtime");
+        if (runtimePath != null && runtimePath.length() > 0)
+            System.out.println("Determined runtime from Java system property: " + runtimePath);
+        if (moquiInitProperties != null && (runtimePath == null || runtimePath.length() == 0)) {
+            runtimePath = moquiInitProperties.getProperty("moqui.runtime");
+            if (runtimePath != null && runtimePath.length() > 0)
+                System.out.println("Determined runtime from MoquiInit.properties file: " + runtimePath);
+        }
+        if (runtimePath == null || runtimePath.length() == 0) {
+            // see if runtime directory under the current directory exists, if not default to the current directory
+            File testFile = new File("runtime");
+            if (testFile.exists()) runtimePath = "runtime";
+            if (runtimePath != null && runtimePath.length() > 0)
+                System.out.println("Determined runtime from existing runtime subdirectory: " + testFile.getCanonicalPath());
+        }
+        if (runtimePath == null || runtimePath.length() == 0) {
+            runtimePath = ".";
+            System.out.println("Determined runtime by defaulting to current directory: " + runtimePath);
+        }
+        File runtimeFile = new File(runtimePath);
+        runtimePath = runtimeFile.getCanonicalPath();
+        System.out.println("Canonicalized runtimePath: " + runtimePath);
+        if (runtimePath.endsWith("/")) runtimePath = runtimePath.substring(0, runtimePath.length()-1);
+        System.setProperty("moqui.runtime", runtimePath);
+
+        /* Don't do this here... loads as lower-level that WEB-INF/lib jars and so can't have dependencies on those,
+            and dependencies on those are necessary
+        // add runtime/lib jar files to the class loader
+        File runtimeLibFile = new File(runtimePath + "/lib");
+        for (File jarFile: runtimeLibFile.listFiles()) {
+            if (jarFile.getName().endsWith(".jar")) cl.jarFileList.add(new JarFile(jarFile));
+        }
+        */
+
+        String confPath = argMap.get("conf");
+        if (confPath != null && !confPath.isEmpty()) System.out.println("Determined conf from conf argument: " + confPath);
+        if (confPath == null || confPath.isEmpty()) {
+            confPath = System.getProperty("moqui.conf");
+            if (confPath != null && !confPath.isEmpty()) System.out.println("Determined conf from Java system property: " + confPath);
+        }
+        if (moquiInitProperties != null && (confPath == null || confPath.isEmpty())) {
+            confPath = moquiInitProperties.getProperty("moqui.conf");
+            if (confPath != null && !confPath.isEmpty()) System.out.println("Determined conf from MoquiInit.properties file: " + confPath);
+        }
+        if (confPath == null || confPath.isEmpty()) {
+            File testFile = new File(runtimePath + "/" + defaultConf);
+            if (testFile.exists()) confPath = defaultConf;
+            System.out.println("Determined conf by default (dev conf file): " + confPath);
+        }
+        if (confPath != null && !confPath.isEmpty()) System.setProperty("moqui.conf", confPath);
+    }
+
+    private static Process checkStartElasticSearch() {
+        String runtimePath = System.getProperty("moqui.runtime");
+        File osDir = new File(runtimePath + "/opensearch");
+        boolean osDirExists = osDir.exists();
+        String baseName = osDirExists ? "opensearch" : "elasticsearch";
+        String workDir = runtimePath + "/" + baseName;
+        if (!new File(workDir + "/bin").exists()) return null;
+        if (new File(workDir + "/pid").exists()) {
+            System.out.println((osDirExists ? "OpenSearch" : "ElasticSearch") + " install found in " + workDir + ", pid file found so not starting");
+            return null;
+        }
+        String javaHome = System.getProperty("java.home");
+        System.out.println("Starting " + (osDirExists ? "OpenSearch" : "ElasticSearch") + " install found in " + workDir + ", pid file not found (JDK: " + javaHome + ")");
+
+        String os = System.getProperty("os.name").toLowerCase();
+        boolean isWindows = os.startsWith("windows");
+        boolean isMac = os.startsWith("mac");
+        boolean isLinux = os.contains("nix") || os.contains("nux") || os.contains("aix");
+
+        try {
+            String[] command;
+            if (isWindows) {
+                command = new String[] {"cmd.exe", "/c", "bin\\" + baseName + ".bat"};
+            } else {
+                command = new String[]{"./bin/" + baseName};
+                try {
+                    boolean elasticsearchOwner = Files.getOwner(Paths.get(runtimePath, baseName)).getName().equals(baseName);
+                    boolean suAble = false;
+                    if (isLinux) {
+                        suAble = Runtime.getRuntime().exec(new String[]{"/bin/su", "-c", "/bin/true", baseName}).waitFor() == 0;
+                    } else if(isMac) {
+                        suAble = Runtime.getRuntime().exec(new String[]{"/usr/bin/sudo", "-n", "/usr/bin/true"}).waitFor() == 0;
+                    }
+                    if (elasticsearchOwner && suAble) command = new String[]{"su", "-c", "./bin/" + baseName, baseName};
+                } catch (IOException e) {
+                    System.out.println("Error to run " + (Arrays.toString(new String[]{"/usr/bin/sudo", "-n", "/usr/bin/true"})) + ": " + e.getMessage());
+                }
+            }
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            pb.directory(new File(workDir));
+            pb.environment().put("JAVA_HOME", javaHome);
+            pb.inheritIO();
+            Process esProcess = pb.start();
+            System.setProperty("moqui.elasticsearch.started", "true");
+            return esProcess;
+        } catch (Exception e) {
+            System.out.println("Error starting " + (osDirExists ? "OpenSearch" : "ElasticSearch") + " in " + workDir + ": " + e);
+            return null;
+        }
+    }
+    private static void checkStopElasticSearch(Process esProcess) {
+        if (esProcess != null) esProcess.destroy();
+    }
+    private static class ElasticShutdown extends Thread {
+        final Process esProcess;
+        ElasticShutdown(Process esProcess) { super(); this.esProcess = esProcess; }
+        @Override public void run() { esProcess.destroy(); }
+    }
+
+    private static class MoquiShutdown extends Thread {
+        final Method callMethod;
+        final Object callObject;
+        final StartClassLoader moquiStart;
+        MoquiShutdown(Method callMethod, Object callObject, StartClassLoader moquiStart) {
+            super();
+            this.callMethod = callMethod;
+            this.callObject = callObject;
+            this.moquiStart = moquiStart;
+        }
+        @Override
+        public void run() {
+            // run this first, ie shutdown the container before closing jarFiles to avoid errors with classes missing
+            if (callMethod != null) {
+                try { callMethod.invoke(callObject); } catch (Exception e) { System.out.println("Error in shutdown: " + e.toString()); }
+            }
+
+            // give things a couple seconds to destroy; this way of running is mostly for dev/test where this should be sufficient
+            try { synchronized (this) { this.wait(2000); } } catch (Exception e) { System.out.println("Shutdown wait interrupted"); }
+            System.out.println("========== Shutting down Moqui Executable (closing jars, etc) ==========");
+
+            // close all jarFiles so they will "deleteOnExit"
+            for (JarFile jarFile : moquiStart.jarFileList) {
+                try {
+                    jarFile.close();
+                } catch (IOException e) {
+                    System.out.println("Error closing jar [" + jarFile + "]: " + e.toString());
+                }
+            }
+
+            if (reportJarsUnused) {
+                Set<String> sortedJars = new TreeSet<>();
+                String baseName = "execwartmp/moqui_temp";
+                for (String jarName: moquiStart.jarsUnused) {
+                    if (jarName.startsWith(baseName)) {
+                        jarName = jarName.substring(baseName.length());
+                        while (Character.isDigit(jarName.charAt(0))) jarName = jarName.substring(1);
+                    }
+                    sortedJars.add(jarName);
+                }
+                for (String jarName: sortedJars) System.out.println("JAR unused: " + jarName);
+            }
+        }
+    }
+
+    private static class StartClassLoader extends ClassLoader {
+
+        private URL wrapperUrl = null;
+        private boolean isInWar = true;
+        final ArrayList<JarFile> jarFileList = new ArrayList<>();
+        private final Map<String, URL> jarLocationByJarName = new HashMap<>();
+        private final Map<String, Class<?>> classCache = new HashMap<>();
+        private final Map<String, URL> resourceCache = new HashMap<>();
+        private ProtectionDomain pd;
+        private final boolean loadWebInf;
+
+        final Set<String> jarsUnused = new HashSet<>();
+
+        private StartClassLoader(boolean loadWebInf) {
+            this(ClassLoader.getSystemClassLoader(), loadWebInf);
+        }
+
+        private StartClassLoader(ClassLoader parent, boolean loadWebInf) {
+            super(parent);
+            this.loadWebInf = loadWebInf;
+
+            try {
+                // get outer file (the war file)
+                pd = getClass().getProtectionDomain();
+                CodeSource cs = pd.getCodeSource();
+                wrapperUrl = cs.getLocation();
+                File wrapperFile = new File(wrapperUrl.toURI());
+                isInWar = !wrapperFile.isDirectory();
+
+                /* to accommodate an executable start.jar file inside the executable WAR file:
+                if (isInWar && wrapperFile.getName().equals("start.jar")) {
+                    isInWar = false;
+                    wrapperFile = wrapperFile.getParentFile();
+                    wrapperUrl = wrapperFile.toURI().toURL();
+                }
+                */
+
+                if (isInWar) {
+                    JarFile outerFile = new JarFile(wrapperFile);
+
+                    // allow for classes in the outerFile as well
+                    jarFileList.add(outerFile);
+                    jarLocationByJarName.put(outerFile.getName(), wrapperUrl);
+
+                    Enumeration<JarEntry> jarEntries = outerFile.entries();
+                    while (jarEntries.hasMoreElements()) {
+                        JarEntry je = jarEntries.nextElement();
+                        if (je.isDirectory()) continue;
+                        // if we aren't loading the WEB-INF files and it is one, skip it
+                        if (!loadWebInf && je.getName().startsWith("WEB-INF")) continue;
+                        // get jars, can be anywhere in the file
+                        String jeName = je.getName().toLowerCase();
+                        if (jeName.lastIndexOf(".jar") == jeName.length() - 4) {
+                            File file = createTempFile(outerFile, je);
+                            JarFile newJarFile = new JarFile(file);
+                            jarFileList.add(newJarFile);
+                            jarLocationByJarName.put(newJarFile.getName(), file.toURI().toURL());
+                        }
+                    }
+                } else {
+                    ArrayList<File> jarList = new ArrayList<>();
+                    addJarFilesNested(wrapperFile, jarList, loadWebInf);
+                    for (File jarFile : jarList) {
+                        JarFile newJarFile = new JarFile(jarFile);
+                        jarFileList.add(newJarFile);
+                        jarLocationByJarName.put(newJarFile.getName(), jarFile.toURI().toURL());
+                        // System.out.println("jar file: " + jarFile.getAbsolutePath());
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("Error loading jars in war file [" + wrapperUrl + "]: " + e.toString());
+            }
+
+            if (reportJarsUnused) for (JarFile jf : jarFileList) jarsUnused.add(jf.getName());
+        }
+
+        private ConcurrentHashMap<URL, ProtectionDomain> protectionDomainByUrl = new ConcurrentHashMap<>();
+        private ProtectionDomain getProtectionDomain(URL jarLocation) {
+            ProtectionDomain curPd = protectionDomainByUrl.get(jarLocation);
+            if (curPd != null) return curPd;
+            CodeSource codeSource = new CodeSource(jarLocation, (Certificate[]) null);
+            ProtectionDomain newPd = new ProtectionDomain(codeSource, null, this, null);
+            ProtectionDomain existingPd = protectionDomainByUrl.putIfAbsent(jarLocation, newPd);
+            return existingPd != null ? existingPd : newPd;
+        }
+
+        private void addJarFilesNested(File file, List<File> jarList, boolean loadWebInf) {
+            for (File child : file.listFiles()) {
+                if (child.isDirectory()) {
+                    // generally run with the runtime directory in the same directory, so skip it (or causes weird class dependency errors)
+                    if ("runtime".equals(child.getName())) continue;
+                    // if we aren't loading the WEB-INF files and it is one, skip it
+                    if (!loadWebInf && "WEB-INF".equals(child.getName())) continue;
+                    addJarFilesNested(child, jarList, loadWebInf);
+                } else if (child.getName().endsWith(".jar")) {
+                    jarList.add(child);
+                }
+            }
+        }
+
+        @SuppressWarnings("ThrowFromFinallyBlock")
+        private File createTempFile(JarFile outerFile, JarEntry je) throws IOException {
+            byte[] jeBytes = getJarEntryBytes(outerFile, je);
+
+            String tempName = je.getName().replace('/', '_') + ".";
+            File tempDir = new File(tempDirName);
+            if (tempDir.mkdir()) tempDir.deleteOnExit();
+            File file = File.createTempFile("moqui_temp", tempName, tempDir);
+            file.deleteOnExit();
+            BufferedOutputStream os = null;
+            try {
+                os = new BufferedOutputStream(new FileOutputStream(file));
+                os.write(jeBytes);
+            } finally {
+                if (os != null) os.close();
+            }
+            return file;
+        }
+
+        @SuppressWarnings("ThrowFromFinallyBlock")
+        private byte[] getJarEntryBytes(JarFile jarFile, JarEntry je) throws IOException {
+            DataInputStream dis = null;
+            byte[] jeBytes = null;
+            try {
+                long lSize = je.getSize();
+                if (lSize <= 0  ||  lSize >= Integer.MAX_VALUE) {
+                    throw new IllegalArgumentException("Size [" + lSize + "] not valid for war entry [" + je + "]");
+                }
+                jeBytes = new byte[(int)lSize];
+                InputStream is = jarFile.getInputStream(je);
+                dis = new DataInputStream(is);
+                dis.readFully(jeBytes);
+            } finally {
+                if (dis != null) dis.close();
+            }
+            return jeBytes;
+        }
+
+        /** @see java.lang.ClassLoader#findResource(java.lang.String) */
+        @Override
+        protected URL findResource(String resourceName) {
+            if (resourceCache.containsKey(resourceName)) return resourceCache.get(resourceName);
+
+            // try the runtime/classes directory for conf files and such
+            String runtimePath = System.getProperty("moqui.runtime");
+            String fullPath = runtimePath + "/classes/" + resourceName;
+            File resourceFile = new File(fullPath);
+            if (resourceFile.exists()) try {
+                return resourceFile.toURI().toURL();
+            } catch (MalformedURLException e) {
+                System.out.println("Error making URL for [" + resourceName + "] in runtime classes directory [" + runtimePath + "/classes/" + "]: " + e.toString());
+            }
+
+            String webInfResourceName = "WEB-INF/classes/" + resourceName;
+            int jarFileListSize = jarFileList.size();
+            for (int i = 0; i < jarFileListSize; i++) {
+                JarFile jarFile = jarFileList.get(i);
+                JarEntry jarEntry = jarFile.getJarEntry(resourceName);
+                if (reportJarsUnused && jarEntry != null) jarsUnused.remove(jarFile.getName());
+                // to better support war format, look for the resourceName in the WEB-INF/classes directory
+                if (loadWebInf && jarEntry == null) jarEntry = jarFile.getJarEntry(webInfResourceName);
+                if (jarEntry != null) {
+                    try {
+                        URL jarLocation = jarLocationByJarName.get(jarFile.getName());
+                        if (jarLocation == null) jarLocation = new File(jarFile.getName()).toURI().toURL();
+                        URL resourceUrl = new URL("jar:" + jarLocation.toExternalForm() + "!/" + jarEntry.getName());
+                        resourceCache.put(resourceName, resourceUrl);
+                        return resourceUrl;
+                    } catch (MalformedURLException e) {
+                        System.out.println("Error making URL for [" + resourceName + "] in jar [" + jarFile + "] in war file [" + wrapperUrl + "]: " + e.toString());
+                    }
+                }
+            }
+            return super.findResource(resourceName);
+        }
+
+        /** @see java.lang.ClassLoader#findResources(java.lang.String) */
+        @Override
+        public Enumeration<URL> findResources(String resourceName) throws IOException {
+            String webInfResourceName = "WEB-INF/classes/" + resourceName;
+            List<URL> urlList = new ArrayList<>();
+            int jarFileListSize = jarFileList.size();
+            for (int i = 0; i < jarFileListSize; i++) {
+                JarFile jarFile = jarFileList.get(i);
+                JarEntry jarEntry = jarFile.getJarEntry(resourceName);
+                if (reportJarsUnused && jarEntry != null) jarsUnused.remove(jarFile.getName());
+                // to better support war format, look for the resourceName in the WEB-INF/classes directory
+                if (loadWebInf && jarEntry == null) jarEntry = jarFile.getJarEntry(webInfResourceName);
+                if (jarEntry != null) {
+                    try {
+                        URL jarLocation = jarLocationByJarName.get(jarFile.getName());
+                        if (jarLocation == null) jarLocation = new File(jarFile.getName()).toURI().toURL();
+                        urlList.add(new URL("jar:" + jarLocation.toExternalForm() + "!/" + jarEntry.getName()));
+                    } catch (MalformedURLException e) {
+                        System.out.println("Error making URL for [" + resourceName + "] in jar [" + jarFile + "] in war file [" + wrapperUrl + "]: " + e.toString());
+                    }
+                }
+            }
+            // add all resources found in parent loader too
+            Enumeration<URL> superResources = super.findResources(resourceName);
+            while (superResources.hasMoreElements()) urlList.add(superResources.nextElement());
+            return Collections.enumeration(urlList);
+        }
+
+        @Override
+        protected synchronized Class<?> loadClass(String className, boolean resolve) throws ClassNotFoundException {
+            Class<?> c = null;
+            try {
+                try {
+                    ClassLoader cl = getParent();
+                    c = cl.loadClass(className);
+                    if (c != null) return c;
+                } catch (ClassNotFoundException e) { /* let the next one handle this */ }
+
+                try {
+                    c = findJarClass(className);
+                    if (c != null) return c;
+                } catch (Exception e) {
+                    System.out.println("Error loading class [" + className + "] from jars in war file [" + wrapperUrl + "]: " + e.toString());
+                    e.printStackTrace();
+                }
+
+                throw new ClassNotFoundException("Class [" + className + "] not found");
+            } finally {
+                if (c != null  &&  resolve) {
+                    resolveClass(c);
+                }
+            }
+        }
+
+        private Class<?> findJarClass(String className) throws IOException, ClassFormatError {
+            if (classCache.containsKey(className)) return classCache.get(className);
+
+            Class<?> c = null;
+            String classFileName = className.replace('.', '/') + ".class";
+            String webInfFileName = "WEB-INF/classes/" + classFileName;
+            int jarFileListSize = jarFileList.size();
+            for (int i = 0; i < jarFileListSize; i++) {
+                JarFile jarFile = jarFileList.get(i);
+                // System.out.println("Finding Class [" + className + "] in jarFile [" + jarFile.getName() + "]");
+                JarEntry jarEntry = jarFile.getJarEntry(classFileName);
+                if (reportJarsUnused && jarEntry != null) jarsUnused.remove(jarFile.getName());
+
+                // to better support war format, look for the resourceName in the WEB-INF/classes directory
+                if (loadWebInf && jarEntry == null) jarEntry = jarFile.getJarEntry(webInfFileName);
+                if (jarEntry != null) {
+                    definePackage(className, jarFile);
+                    byte[] jeBytes = getJarEntryBytes(jarFile, jarEntry);
+                    if (jeBytes == null) {
+                        System.out.println("Could not get bytes for [" + jarEntry.getName() + "] in [" + jarFile.getName() + "]");
+                        continue;
+                    }
+                    // System.out.println("Class [" + classFileName + "] FOUND in jarFile [" + jarFile.getName() + "], size is " + (jeBytes == null ? "null" : jeBytes.length));
+                    URL jarLocation = jarLocationByJarName.get(jarFile.getName());
+                    c = defineClass(className, jeBytes, 0, jeBytes.length, jarLocation != null ? getProtectionDomain(jarLocation) : pd);
+                    break;
+                }
+            }
+            classCache.put(className, c);
+            return c;
+        }
+
+        private void definePackage(String className, JarFile jarFile) throws IllegalArgumentException {
+            Manifest mf = null;
+            try {
+                mf = jarFile.getManifest();
+            } catch (IOException e) {
+                System.out.println("Error getting manifest from " + jarFile.getName() + ": " + e.toString());
+            }
+            // if no manifest use default
+            if (mf == null) mf = new Manifest();
+
+            int dotIndex = className.lastIndexOf('.');
+            String packageName = dotIndex > 0 ? className.substring(0, dotIndex) : "";
+            // NOTE: for Java 11 changed getPackage() to getDefinedPackage(), can't do before because getDefinedPackage() doesn't exist in Java 8
+            if (getDefinedPackage(packageName) == null) {
+                definePackage(packageName,
+                        mf.getMainAttributes().getValue(Attributes.Name.SPECIFICATION_TITLE),
+                        mf.getMainAttributes().getValue(Attributes.Name.SPECIFICATION_VERSION),
+                        mf.getMainAttributes().getValue(Attributes.Name.SPECIFICATION_VENDOR),
+                        mf.getMainAttributes().getValue(Attributes.Name.IMPLEMENTATION_TITLE),
+                        mf.getMainAttributes().getValue(Attributes.Name.IMPLEMENTATION_VERSION),
+                        mf.getMainAttributes().getValue(Attributes.Name.IMPLEMENTATION_VENDOR),
+                        getSealURL(mf));
+            }
+        }
+
+        private URL getSealURL(Manifest mf) {
+            String seal = mf.getMainAttributes().getValue(Attributes.Name.SEALED);
+            if (seal == null) return null;
+            try {
+                return new URL(seal);
+            } catch (MalformedURLException e) {
+                return null;
+            }
+        }
+    }
+}

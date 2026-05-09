@@ -1,0 +1,254 @@
+/*
+ * This software is in the public domain under CC0 1.0 Universal plus a
+ * Grant of Patent License.
+ *
+ * To the extent possible under law, the author(s) have dedicated all
+ * copyright and related and neighboring rights to this software to the
+ * public domain worldwide. This software is distributed without any
+ * warranty.
+ *
+ * You should have received a copy of the CC0 Public Domain Dedication
+ * along with this software (see the LICENSE.md file). If not, see
+ * <http://creativecommons.org/publicdomain/zero/1.0/>.
+ */
+
+plugins {
+    id 'java-library'
+    id 'groovy'
+    id 'war'
+}
+
+version = '4.0.0'
+
+repositories {
+    flatDir name: 'localLib', dirs: projectDir.absolutePath + '/lib'
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = 21
+    targetCompatibility = 21
+}
+
+base {
+    archivesName.set('moqui')
+}
+
+sourceSets {
+    start
+    execWar
+}
+
+groovydoc {
+    docTitle = "Moqui Framework ${version}"
+    source = sourceSets.main.allSource
+}
+
+//tasks.withType(JavaCompile) { options.compilerArgs << "-Xlint:unchecked" }
+//tasks.withType(JavaCompile) { options.compilerArgs << "-Xlint:deprecation" }
+//tasks.withType(GroovyCompile) { options.compilerArgs << "-Xlint:unchecked" }
+//tasks.withType(GroovyCompile) { options.compilerArgs << "-Xlint:deprecation" }
+
+// Log4J has annotation processors, disable to avoid warning
+tasks.withType(JavaCompile) { options.compilerArgs << "-proc:none" }
+tasks.withType(GroovyCompile) { options.compilerArgs << "-proc:none" }
+
+// NOTE: for dependency types and 'api' definition see: https://docs.gradle.org/current/userguide/java_library_plugin.html
+dependencies {
+    // Groovy
+    api 'org.apache.groovy:groovy:5.0.3' // Apache 2.0
+    api 'org.apache.groovy:groovy-dateutil:5.0.3' // Apache 2.0
+    api 'org.apache.groovy:groovy-json:5.0.3' // Apache 2.0
+    api 'org.apache.groovy:groovy-templates:5.0.3' // Apache 2.0
+    api 'org.apache.groovy:groovy-xml:5.0.3' // Apache 2.0
+
+    // Bitronix Transaction Manager, a modernized fork
+    api 'com.github.moqui.bitronix:btm:4.0.1' // Apache 2.0
+
+    // Apache Commons
+    api 'org.apache.commons:commons-csv:1.14.1' // Apache 2.0
+    api('org.apache.commons:commons-email2-jakarta:2.0.0-M1') {
+        exclude group: 'com.sun.mail', module: 'jakarta.mail'
+        exclude group: 'com.sun.activation', module: 'jakarta.activation'
+    }
+    api 'org.apache.commons:commons-collections4:4.5.0' // Apache 2.0
+    api 'org.apache.commons:commons-fileupload2-jakarta-servlet6:2.0.0-M4' // Apache 2.0
+    api 'commons-codec:commons-codec:1.20.0' // Apache 2.0
+    api 'commons-io:commons-io:2.21.0' // Apache 2.0
+    api 'commons-logging:commons-logging:1.3.5' // Apache 2.0
+    api 'commons-validator:commons-validator:1.10.1' // Apache 2.0
+
+    // Cron Utils
+    api 'com.cronutils:cron-utils:9.2.1' // Apache 2.0
+
+    // Flexmark (markdown)
+    api 'com.vladsch.flexmark:flexmark:0.64.8'
+    api 'com.vladsch.flexmark:flexmark-ext-tables:0.64.8'
+    api 'com.vladsch.flexmark:flexmark-ext-toc:0.64.8'
+
+    // Freemarker
+    // Remember to change the version number in FtlTemplateRenderer and MNode class when upgrading
+    api 'org.freemarker:freemarker:2.3.34' // Apache 2.0
+
+    // H2 Database
+    api 'com.h2database:h2:2.4.240' // MPL 2.0, EPL 1.0
+
+    // Java Specifications
+    api 'jakarta.transaction:jakarta.transaction-api:2.0.1'
+    api 'javax.cache:cache-api:1.1.1'
+    api 'javax.jcr:jcr:2.0'
+    api('jakarta.xml.bind:jakarta.xml.bind-api:4.0.4') { transitive = false } // EPL 2.0
+    api 'jakarta.activation:jakarta.activation-api:2.1.4' // activation api
+    api 'org.eclipse.angus:angus-activation:2.0.3' // activation implementation
+    api 'jakarta.websocket:jakarta.websocket-api:2.2.0'
+    api 'jakarta.websocket:jakarta.websocket-client-api:2.2.0'
+
+    // servlet-api needed during both compile and test
+    compileOnlyApi 'jakarta.servlet:jakarta.servlet-api:6.1.0'
+    testImplementation 'jakarta.servlet:jakarta.servlet-api:6.1.0'
+
+    // Java TOTP
+    api 'dev.samstevens.totp:totp:1.7.1' // MIT
+    // dev.samstevens.totp:totp depends on com.google.zxing:javase which depends on com.beust:jcommander, but an older version with a CVE, so specify latest to fix
+    api 'com.beust:jcommander:1.82'
+
+    // Jackson Databind (JSON, etc)
+    api 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
+
+    // Jetty HTTP Client and Proxy Servlet
+    api 'org.eclipse.jetty:jetty-client:12.1.5' // Apache 2.0
+    api 'org.eclipse.jetty.ee11:jetty-ee11-proxy:12.1.5' // Apache 2.0
+    api 'org.eclipse.jetty:jetty-jndi:12.1.5' // Apache 2.0
+
+    // jakarta.mail
+    api 'jakarta.mail:jakarta.mail-api:2.1.5' // mail api
+    api 'org.eclipse.angus:angus-mail:2.0.5' // mail implementation
+
+    // JSoup (HTML parser, cleaner)
+    api 'org.jsoup:jsoup:1.21.2' // MIT
+
+    // Apache Shiro
+    api('org.apache.shiro:shiro-core:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-web:2.0.6:jakarta') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-lang:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-cache:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-event:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-config-core:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-config-ogdl:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-crypto-core:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-crypto-hash:2.0.6') { transitive = false } // Apache 2.0
+    api('org.apache.shiro:shiro-crypto-cipher:2.0.6') { transitive = false } // Apache 2.0
+    api('org.owasp.encoder:encoder:1.4.0') // BSD - transitive dependency of shiro-web
+
+    // SLF4J, Log4j 2 (note Log4j 2 is used by various libraries, best not to replace it even if mostly possible with SLF4J)
+    api 'org.slf4j:slf4j-api:2.0.17'
+    implementation 'org.apache.logging.log4j:log4j-core:2.25.2'
+    implementation 'org.apache.logging.log4j:log4j-api:2.25.2'
+    runtimeOnly 'org.apache.logging.log4j:log4j-jcl:2.25.2'
+    runtimeOnly 'org.apache.logging.log4j:log4j-slf4j2-impl:2.25.2'
+
+    // SubEtha SMTP, depends on jakarta.mail-api which is provided
+    api("com.github.davidmoten:subethasmtp:7.2.0") { transitive = false }
+
+    // Snake YAML
+    api 'org.yaml:snakeyaml:2.5' // Apache 2.0
+
+    // Apache Jackrabbit - uncomment here or include elsewhere when Jackrabbit repository configurations are used
+    // api 'org.apache.jackrabbit:jackrabbit-jcr-rmi:2.12.1' // Apache 2.0
+    // api 'org.apache.jackrabbit:jackrabbit-jcr2dav:2.12.1' // Apache 2.0
+
+    // Apache Commons JCS - Only needed when using JCSCacheToolFactory
+    // api 'org.apache.commons:commons-jcs-jcache:2.0-beta-1' // Apache 2.0
+
+    // Liquibase (for future reference, not used yet)
+    // api 'org.liquibase:liquibase-core:3.4.2' // Apache 2.0
+
+    // ========== test dependencies ==========
+
+    // junit-platform-launcher is a dependency from spock-core, included explicitly to get more recent version as needed
+    testImplementation 'org.junit.platform:junit-platform-launcher:6.0.1'
+    // junit-platform-suite required for test suites to specify test class order, etc
+    testImplementation 'org.junit.platform:junit-platform-suite:6.0.1'
+    // junit-jupiter-api for using JUnit directly, not generally needed for Spock based tests
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.1'
+    // Spock Framework
+    testImplementation platform('org.spockframework:spock-bom:2.4-groovy-5.0') // Apache 2.0
+    testImplementation 'org.spockframework:spock-core:2.4-groovy-5.0' // Apache 2.0
+    testImplementation 'org.spockframework:spock-junit4:2.4-groovy-5.0' // Apache 2.0
+    testImplementation 'org.hamcrest:hamcrest-core:3.0' // BSD 3-Clause
+
+    // ========== executable war dependencies ==========
+    // Jetty
+    execWarRuntimeOnly 'org.eclipse.jetty:jetty-server:12.1.5' // Apache 2.0
+    execWarRuntimeOnly 'org.eclipse.jetty.ee11:jetty-ee11-webapp:12.1.5' // Apache 2.0
+    execWarRuntimeOnly 'org.eclipse.jetty.ee11.websocket:jetty-ee11-websocket-jakarta-server:12.1.5' // Apache 2.0
+}
+
+// setup task dependencies to make sure the start sourceSets always get run
+compileJava.dependsOn startClasses
+compileTestGroovy.dependsOn classes
+sourceSets.test.compileClasspath += files(sourceSets.main.output.classesDirs)
+
+// by default the Java plugin runs test on build, change to not do that (only run test if explicit task)
+// no longer works as of gradle 4.8 or possibly earlier, use clear() instead: check.dependsOn.remove(test)
+check.dependsOn.clear()
+
+test {
+    useJUnitPlatform()
+    testLogging { events "passed", "skipped", "failed" }
+    testLogging.showStandardStreams = true; testLogging.showExceptions = true
+    maxParallelForks = 1
+
+    dependsOn cleanTest
+    include '**/*MoquiSuite.class'
+
+    systemProperty 'moqui.runtime', '../runtime'
+    systemProperty 'moqui.conf', 'conf/MoquiDevConf.xml'
+    systemProperty 'moqui.init.static', 'true'
+
+    classpath += files(sourceSets.main.output.classesDirs); classpath += files(projectDir.absolutePath)
+    // filter out classpath entries that don't exist (gradle adds a bunch of these), or ElasticSearch JarHell will blow up
+    classpath = classpath.filter { it.exists() }
+
+    beforeTest { descriptor -> logger.lifecycle("Running test: ${descriptor}") }
+}
+
+jar {
+    // this is necessary otherwise jar won't build when war plugin is applied
+    enabled = true
+    archiveBaseName = 'moqui-framework'
+    manifest { attributes 'Implementation-Title': 'Moqui Framework', 'Implementation-Version': version, 'Implementation-Vendor': 'Moqui Ecosystem' }
+    from sourceSets.main.output
+    // get all of the "resources" that are in component-standard directories instead of src/main/resources
+    from fileTree(dir: projectDir.absolutePath, includes: ['data/**', 'entity/**', 'screen/**', 'service/**', 'template/**']) // 'xsd/**'
+}
+
+tasks.test {
+    inputs.files(tasks.jar)
+}
+
+war {
+    dependsOn jar
+    // put the war file in the parent directory, ie the moqui dir instead of the framework dir
+    destinationDirectory.set(projectDir.parentFile)
+    archiveFileName = 'moqui.war'
+    // add MoquiInit.properties to the WEB-INF/classes dir for the deployed war mode of operation
+    from(fileTree(dir: projectDir.parentFile, includes: ['MoquiInit.properties'])) { into 'WEB-INF/classes' }
+    // this excludes the classes in sourceSets.main.output (better to have the jar file built above)
+    classpath = configurations.runtimeClasspath - configurations.providedCompile
+    classpath jar.archiveFile.get().asFile
+
+    // put start classes and Jetty jars in the root of the war file for the executable war/jar mode of operation
+    from sourceSets.start.output
+    from(files(configurations.execWarRuntimeClasspath)) { into 'execlib' }
+    // TODO some sort of config for Jetty? from file(projectDir.absolutePath + '/jetty/jetty.xml')
+    // setup the manifest for the executable war/jar mode
+    manifest { attributes 'Implementation-Title': 'Moqui Start', 'Implementation-Vendor': 'Moqui Ecosystem',
+            'Implementation-Version': version, 'Main-Class': 'MoquiStart' }
+}
+
+task copyDependencies { doLast {
+    delete file(projectDir.absolutePath + '/dependencies')
+    copy { from configurations.runtime; into file(projectDir.absolutePath + '/dependencies') }
+    copy { from configurations.testCompile; into file(projectDir.absolutePath + '/dependencies') }
+} }

@@ -1,0 +1,32 @@
+# ── Build output ─────────────────────────────────────────────
+build/
+framework/build/
+execwartmp/
+
+# ── Moqui WAR (rebuilt from source) ─────────────────────────
+moqui.war
+
+# ── Runtime — generated / stateful data ─────────────────────
+runtime/db/
+runtime/txlog/
+runtime/sessions/
+runtime/classes/
+runtime/script-classes/
+runtime/log/
+runtime/logs/
+
+# ── Runtime — temp files from reset.sh tests ────────────────
+runtime/tmp_*
+
+# ── OS files ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor / IDE ────────────────────────────────────────────
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+.vscode/
+*.code-workspace

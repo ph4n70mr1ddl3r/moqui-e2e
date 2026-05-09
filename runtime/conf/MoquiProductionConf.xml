@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Moqui Headless API Server Configuration -->
+<moqui-conf xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/moqui-conf-3.xsd">
+
+    <default-property name="instance_purpose" value="production"/>
+    <default-property name="webapp_http_host" value="0.0.0.0"/>
+    <default-property name="webapp_http_port" value="8080"/>
+    <default-property name="webapp_https_enabled" value="false"/>
+    <default-property name="webapp_handle_cors" value="true"/>
+    <default-property name="webapp_allow_origins" value="*"/>
+
+    <!-- Only seed+install on empty DB — no demo -->
+    <default-property name="entity_empty_db_load" value="seed,seed-initial,install"/>
+
+    <entity-facade crypt-pass="${entity_ds_crypt_pass}" query-stats="true">
+        <datasource group-name="transactional" object-factory="org.moqui.impl.entity.EntityDatasourceFactory"
+                inline-jdbc-jdbc-driver="org.h2.Driver"
+                inline-jdbc-jdbc-uri="jdbc:h2:${moqui_runtime}/db/h2/${entity_ds_database};lock_timeout=30000"
+                inline-jdbc-jdbc-username="sa"
+                inline-jdbc-jdbc-password="sa"/>
+    </entity-facade>
+
+    <server-stats stats-skip-condition="pathInfo?.startsWith('/rpc') || pathInfo?.startsWith('/rest') || pathInfo?.startsWith('/status')"
+            visit-enabled="false" visitor-enabled="false"/>
+
+    <tools worker-queue="65535" worker-pool-core="16" worker-pool-max="32" worker-pool-alive="60">
+        <tool-factory class="org.moqui.impl.tools.MCacheToolFactory" init-priority="03" disabled="false"/>
+        <tool-factory class="org.moqui.impl.tools.H2ServerToolFactory" init-priority="12" disabled="true"/>
+        <tool-factory class="org.moqui.impl.tools.JackrabbitRunToolFactory" init-priority="40" disabled="true"/>
+        <tool-factory class="org.moqui.impl.tools.SubEthaSmtpToolFactory" init-priority="50" disabled="true"/>
+    </tools>
+
+    <!-- Relaxed password policy for initial admin/API use -->
+    <user-facade>
+        <password encrypt-hash-type="SHA-256" min-length="4" min-digits="0" min-others="0"
+                  history-limit="0" change-weeks="0" email-require-change="false" email-expire-hours="48"/>
+        <login-key encrypt-hash-type="SHA-256" expire-hours="144"/>
+        <login max-failures="10" disable-minutes="5" history-store="true" history-incorrect-password="false"/>
+    </user-facade>
+
+    <webapp-list>
+        <webapp name="webroot" http-port="${webapp_http_port}" http-host="${webapp_http_host}"
+                https-enabled="false"
+                handle-cors="true" allow-origins="*"
+                require-session-token="true"
+                websocket-timeout="600000">
+            <root-screen host=".*" location="component://webroot/screen/webroot.xml"/>
+            <error-screen error="unauthorized" screen-path="error/Unauthorized"/>
+            <error-screen error="forbidden" screen-path="error/Forbidden"/>
+            <error-screen error="not-found" screen-path="error/NotFound"/>
+            <error-screen error="too-many" screen-path="error/TooMany"/>
+            <error-screen error="internal-error" screen-path="error/InternalError"/>
+        </webapp>
+    </webapp-list>
+</moqui-conf>
