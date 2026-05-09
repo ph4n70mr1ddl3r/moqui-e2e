@@ -6071,6 +6071,151 @@ done
 sim_pass "Server responsive after all edge case tests"
 
 # ════════════════════════════════════════════════════════════
+# Phase 11b: BUG HUNT — Strict Invoice Total & Payment Verification
+# ════════════════════════════════════════════════════════════
+
+section "BUG HUNT: Strict Invoice Total & Payment Verification"
+sim_info "Creating a known order → invoice → payment flow and strictly verifying every amount."
+
+# ── Known-order setup ──────────────────────────────────────
+step "Bug Hunt: Create order with known amounts"
+# 2 × $49.99 = $99.98
+# 3 × $19.99 = $59.97
+# Expected grand total = $159.95
+BH_ORDER=$(api_post "/rest/s1/mantle/orders" \
+    "{\"orderName\":\"BugHunt-Total-Verify\",\"customerPartyId\":\"${CUST2_ID:-_NA_}\",\"vendorPartyId\":\"${OUR_ORG:-_NA_}\",\"currencyUomId\":\"USD\",\"facilityId\":\"${MAIN_FAC:-_NA_}\"}")
+BH_OID=$(echo "$BH_ORDER" | json_val "['orderId']")
+BH_PART=$(echo "$BH_ORDER" | json_val "['orderPartSeqId']")
+if [ -z "$BH_OID" ]; then critical_fail "Bug Hunt: Failed to create order"; fi
+sim_info "Created order: $BH_OID / part $BH_PART"
+
+BH_I1=$(api_post "/rest/s1/mantle/orders/${BH_OID}/items" \
+    "{\"orderPartSeqId\":\"${BH_PART}\",\"productId\":\"${PROD1_ID:-WDG-A}\",\"quantity\":2,\"unitAmount\":49.99}")
+BH_S1=$(echo "$BH_I1" | json_val "['orderItemSeqId']")
+if [ -z "$BH_S1" ]; then sim_fail "Bug Hunt: Failed to add item 1"; fi
+
+BH_I2=$(api_post "/rest/s1/mantle/orders/${BH_OID}/items" \
+    "{\"orderPartSeqId\":\"${BH_PART}\",\"productId\":\"${PROD2_ID:-WDG-B}\",\"quantity\":3,\"unitAmount\":19.99}")
+BH_S2=$(echo "$BH_I2" | json_val "['orderItemSeqId']")
+if [ -z "$BH_S2" ]; then sim_fail "Bug Hunt: Failed to add item 2"; fi
+
+# Place & approve
+api_post "/rest/s1/mantle/orders/${BH_OID}/place" '{}' > /dev/null 2>&1
+api_post "/rest/s1/mantle/orders/${BH_OID}/approve" '{}' > /dev/null 2>&1
+
+# ── Verify order total ──────────────────────────────────────
+step "Bug Hunt: Verify order grand total"
+BH_DATA=$(api_get "/rest/s1/mantle/orders/${BH_OID}")
+BH_TOTAL=$(echo "$BH_DATA" | json_val ".get('grandTotal','')")
+BH_EXPECTED=$(python3 -c "print(round(2*49.99 + 3*19.99, 2))")
+if [ "$BH_TOTAL" = "$BH_EXPECTED" ]; then
+    sim_pass "Bug Hunt: Order grand total = \$$BH_TOTAL (matches expected \$$BH_EXPECTED)"
+else
+    sim_fail "Bug Hunt: Order grand total = \$$BH_TOTAL (expected \$$BH_EXPECTED) — TOTAL MISMATCH"
+fi
+
+# ── Create invoice from order ───────────────────────────────
+step "Bug Hunt: Create invoice from order & verify total"
+BH_INV=$(api_post "/rest/s1/mantle/orders/${BH_OID}/parts/${BH_PART}/invoices" '{}')
+BH_INV_ID=$(echo "$BH_INV" | json_val "['invoiceId']")
+if [ -z "$BH_INV_ID" ]; then sim_fail "Bug Hunt: Failed to create invoice from order"; fi
+
+# Wait briefly for EECA to update totals
+sleep 1
+
+BH_INV_DATA=$(api_get "/rest/s1/mantle/invoices/${BH_INV_ID}")
+BH_INV_TOTAL=$(echo "$BH_INV_DATA" | json_val ".get('invoiceTotal','')")
+if [ "$BH_INV_TOTAL" = "$BH_EXPECTED" ]; then
+    sim_pass "Bug Hunt: Invoice total = \$$BH_INV_TOTAL (matches order total \$$BH_EXPECTED)"
+else
+    sim_fail "Bug Hunt: Invoice total = \$$BH_INV_TOTAL but order total = \$$BH_EXPECTED — INVOICE TOTAL MISMATCH"
+fi
+
+# ── Verify invoice items match order items ──────────────────
+step "Bug Hunt: Verify invoice items"
+# The /items sub-resource has no GET; items come via the invoice master
+BH_INV_ITEM_COUNT=$(echo "$BH_INV_DATA" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    items = d.get('items', [])
+    print(len(items))
+except: print(0)
+" 2>/dev/null || echo "0")
+if [ "${BH_INV_ITEM_COUNT:-0}" -ge 2 ]; then
+    sim_pass "Bug Hunt: Invoice has $BH_INV_ITEM_COUNT items (expected >=2)"
+else
+    sim_fail "Bug Hunt: Invoice has $BH_INV_ITEM_COUNT items (expected >=2) — MISSING ITEMS"
+fi
+
+# ── Create exact payment & apply ────────────────────────────
+step "Bug Hunt: Create exact payment & apply to invoice"
+BH_PAY=$(api_post "/rest/s1/mantle/payments" \
+    "{\"paymentTypeEnumId\":\"PtInvoicePayment\",\"fromPartyId\":\"${CUST2_ID:-_NA_}\",\"toPartyId\":\"${OUR_ORG:-_NA_}\",\"amount\":${BH_EXPECTED},\"amountUomId\":\"USD\",\"statusId\":\"PmntDelivered\",\"effectiveDate\":\"${TODAY}T00:00:00\"}")
+BH_PAY_ID=$(echo "$BH_PAY" | json_val "['paymentId']")
+if [ -z "$BH_PAY_ID" ]; then sim_fail "Bug Hunt: Failed to create payment"; fi
+sim_info "Created payment: $BH_PAY_ID for \$$BH_EXPECTED"
+
+BH_APPLY=$(api_post "/rest/s1/mantle/payments/${BH_PAY_ID}/invoices/${BH_INV_ID}/apply" '{}')
+BH_PAID=$(echo "$BH_APPLY" | json_val "['paymentApplicationId']")
+BH_APPLY_MSG=$(echo "$BH_APPLY" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    msgs = d.get('messages', [])
+    print('; '.join(msgs) if msgs else d.get('message',''))
+except: print('')
+" 2>/dev/null || echo "")
+if [ -n "$BH_PAID" ]; then
+    sim_pass "Bug Hunt: Payment applied to invoice (applicationId=$BH_PAID)"
+else
+    sim_fail "Bug Hunt: Payment apply returned no paymentApplicationId — PAYMENT NOT APPLIED (message: $BH_APPLY_MSG)"
+fi
+
+# ── Verify invoice is fully paid ────────────────────────────
+step "Bug Hunt: Verify invoice is fully paid"
+sleep 1  # Wait for EECA to propagate
+BH_INV_FINAL=$(api_get "/rest/s1/mantle/invoices/${BH_INV_ID}")
+BH_UNPAID=$(echo "$BH_INV_FINAL" | json_val ".get('unpaidTotal','')")
+BH_INV_STATUS=$(echo "$BH_INV_FINAL" | json_val ".get('statusId','')")
+BH_APPLIED_TOTAL=$(echo "$BH_INV_FINAL" | json_val ".get('appliedPaymentsTotal','')")
+
+sim_info "Invoice final state: total=\$$BH_INV_TOTAL unpaid=\$$BH_UNPAID applied=\$$BH_APPLIED_TOTAL status=$BH_INV_STATUS"
+
+# strict: unpaidTotal must be 0.00 or 0
+if [ "$BH_UNPAID" = "0.00" ] || [ "$BH_UNPAID" = "0" ] || [ "$BH_UNPAID" = "0.0" ]; then
+    sim_pass "Bug Hunt: Invoice unpaidTotal = \$$BH_UNPAID (fully paid)"
+else
+    sim_fail "Bug Hunt: Invoice unpaidTotal = \$$BH_UNPAID (expected 0.00) — INVOICE NOT FULLY PAID"
+fi
+
+# strict: status must be InvoicePmtRecvd
+if [ "$BH_INV_STATUS" = "InvoicePmtRecvd" ] || [ "$BH_INV_STATUS" = "InvoicePmtSent" ]; then
+    sim_pass "Bug Hunt: Invoice status = $BH_INV_STATUS (correctly transitioned after full payment)"
+else
+    sim_fail "Bug Hunt: Invoice status = $BH_INV_STATUS (expected InvoicePmtRecvd or InvoicePmtSent) — STATUS NOT TRANSITIONED"
+fi
+
+# strict: appliedPaymentsTotal must match invoiceTotal
+if [ "$BH_APPLIED_TOTAL" = "$BH_INV_TOTAL" ]; then
+    sim_pass "Bug Hunt: appliedPaymentsTotal (\$$BH_APPLIED_TOTAL) matches invoiceTotal (\$$BH_INV_TOTAL)"
+else
+    sim_fail "Bug Hunt: appliedPaymentsTotal (\$$BH_APPLIED_TOTAL) != invoiceTotal (\$$BH_INV_TOTAL) — PAYMENT APPLICATION AMOUNT MISMATCH"
+fi
+
+# strict: verify the payment's unappliedTotal is 0
+step "Bug Hunt: Verify payment is fully applied"
+BH_PAY_DATA=$(api_get "/rest/s1/mantle/payments/${BH_PAY_ID}")
+BH_PAY_UNAPPLIED=$(echo "$BH_PAY_DATA" | json_val ".get('unappliedTotal','')")
+if [ "$BH_PAY_UNAPPLIED" = "0.00" ] || [ "$BH_PAY_UNAPPLIED" = "0" ] || [ "$BH_PAY_UNAPPLIED" = "0.0" ]; then
+    sim_pass "Bug Hunt: Payment unappliedTotal = \$$BH_PAY_UNAPPLIED (fully applied)"
+else
+    sim_fail "Bug Hunt: Payment unappliedTotal = \$$BH_PAY_UNAPPLIED (expected 0.00) — PAYMENT NOT FULLY APPLIED"
+fi
+
+sim_info "═══ BUG HUNT COMPLETE ═══"
+
+# ════════════════════════════════════════════════════════════
 # Phase 12: SUMMARY
 # ════════════════════════════════════════════════════════════
 
