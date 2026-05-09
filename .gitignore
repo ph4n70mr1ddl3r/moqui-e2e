@@ -2,6 +2,8 @@
 build/
 framework/build/
 execwartmp/
+.gradle/
+gradle/
 
 # ── Moqui WAR (rebuilt from source) ─────────────────────────
 moqui.war
