@@ -381,17 +381,40 @@ else sim_fail "Failed to create product Raw Material X: $(echo "$PROD5_RESULT" |
 
 # ── 7h. Product Prices ───────────────────────────────────
 step "Setting product prices"
-for pp in "${PROD1_ID}:29.99:PppPurchase" "${PROD1_ID}:49.99:PppList" \
-          "${PROD2_ID}:39.99:PppPurchase" "${PROD2_ID}:69.99:PppList" \
-          "${PROD3_ID}:149.99:PppPurchase" "${PROD3_ID}:199.99:PppList" \
-          "${PROD4_ID}:99.99:PppPurchase" "${PROD4_ID}:149.99:PppList" \
-          "${PROD5_ID}:5.00:PppPurchase" "${PROD5_ID}:8.00:PppList"; do
+for pp in "${PROD1_ID}:29.99:PppPurchase" "${PROD1_ID}:49.99:PppPurchase" \
+          "${PROD2_ID}:39.99:PppPurchase" "${PROD2_ID}:69.99:PppPurchase" \
+          "${PROD3_ID}:149.99:PppPurchase" "${PROD3_ID}:199.99:PppPurchase" \
+          "${PROD4_ID}:99.99:PppPurchase" "${PROD4_ID}:149.99:PppPurchase" \
+          "${PROD5_ID}:5.00:PppPurchase" "${PROD5_ID}:8.00:PppPurchase"; do
     IFS=':' read -r pid price purpose <<< "$pp"
     [ -z "$pid" ] && continue
     api_post "/rest/s1/mantle/products/${pid}/prices" \
         "{\"price\":${price},\"pricePurposeEnumId\":\"${purpose}\",\"priceTypeEnumId\":\"PptList\",\"currencyUomId\":\"USD\"}" > /dev/null 2>&1 || true
 done
 sim_pass "Product prices set (purchase + list for all products)"
+
+# ── 7h-verify. Verify product prices created ──────────────
+step "Verifying product prices were created"
+PRICE_VERIFY_FAILED=0
+for pid in "${PROD1_ID}" "${PROD2_ID}" "${PROD3_ID}" "${PROD4_ID}" "${PROD5_ID}"; do
+    [ -z "$pid" ] && continue
+    prices_resp=$(api_get "/rest/e1/ProductPrice?productId=${pid}")
+    # Count prices: Mantle REST wraps in productPriceList, entity REST returns raw list
+    price_count=$(echo "$prices_resp" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+items = d if isinstance(d,list) else d.get('productPriceList', d.get('prices',[]))
+print(len(items) if isinstance(items,list) else 0)
+" 2>/dev/null || echo "0")
+    if [ "${price_count:-0}" -ge 2 ]; then
+        verbose "  ${pid}: ${price_count} prices"
+    else
+        PRICE_VERIFY_FAILED=$((PRICE_VERIFY_FAILED+1))
+        verbose "  ${pid}: only ${price_count} price(s) (expected ≥ 2)"
+    fi
+done
+if [ "${PRICE_VERIFY_FAILED}" -eq 0 ]; then sim_pass "All 5 products have ≥ 2 prices"
+else sim_fail "${PRICE_VERIFY_FAILED} product(s) missing expected prices (PppList bug: invalid enum)"; fi
 
 # ── 7i. User accounts ────────────────────────────────────
 step "Creating user accounts"
@@ -2755,7 +2778,7 @@ else sim_info "Delete ghost enum response (HTTP $(hc)): $(echo "$DEL_GHOST_ENUM"
 # ── 11er. Product price with very large amount ────────
 step "Edge: Product Price Very Large Amount"
 BIG_PRICE=$(api_post "/rest/s1/mantle/products/${PROD1_ID:-WDG-A}/prices" \
-    '{"price":999999999.99,"pricePurposeEnumId":"PppList","priceTypeEnumId":"PptList","currencyUomId":"USD"}')
+    '{"price":999999999.99,"pricePurposeEnumId":"PppPurchase","priceTypeEnumId":"PptList","currencyUomId":"USD"}')
 BIG_PRICE_ID=$(echo "$BIG_PRICE" | json_val "['productPriceId']")
 if [ -n "$BIG_PRICE_ID" ]; then sim_pass "Very large price accepted: $BIG_PRICE_ID"
 else sim_info "Very large price response (HTTP $(hc)): $(echo "$BIG_PRICE" | head -c 40)"; fi
@@ -2866,7 +2889,7 @@ fi
 # ── 11fc. Product price with missing currency ──────────
 step "Edge: Product Price Missing Currency"
 NO_CURR_PRICE=$(api_post "/rest/s1/mantle/products/${PROD1_ID:-WDG-A}/prices" \
-    '{"price":25.00,"pricePurposeEnumId":"PppList","priceTypeEnumId":"PptList"}')
+    '{"price":25.00,"pricePurposeEnumId":"PppPurchase","priceTypeEnumId":"PptList"}')
 NO_CURR_PID=$(echo "$NO_CURR_PRICE" | json_val "['productPriceId']")
 if [ -n "$NO_CURR_PID" ]; then sim_pass "Price without currency accepted (defaulted): $NO_CURR_PID"
 else sim_info "Price missing currency response (HTTP $(hc)): $(echo "$NO_CURR_PRICE" | head -c 40)"; fi
@@ -4341,7 +4364,7 @@ else sim_fail "Ghost product feature should be rejected: $(echo "$GHOST_FEAT" | 
 # ── 11jq. Product price on non-existent product ──────
 step "Edge: Product Price On Ghost Product"
 GHOST_PRICE=$(api_post "/rest/s1/mantle/products/GHOST_PROD_PRICE_99999/prices" \
-    '{"price":10.00,"pricePurposeEnumId":"PppList","priceTypeEnumId":"PptList","currencyUomId":"USD"}')
+    '{"price":10.00,"pricePurposeEnumId":"PppPurchase","priceTypeEnumId":"PptList","currencyUomId":"USD"}')
 if echo "$GHOST_PRICE" | has_error; then sim_pass "Price on ghost product correctly rejected"
 else sim_fail "Ghost product price should be rejected: $(echo "$GHOST_PRICE" | head -c 40)"; fi
 
@@ -5848,7 +5871,7 @@ else sim_info "GL listing (HTTP $(hc))"; fi
 step "Edge: Multiple Prices For Same Product"
 for price_val in 11.11 22.22 33.33; do
     api_post "/rest/s1/mantle/products/${PROD1_ID:-WDG-A}/prices" \
-        "{\"price\":${price_val},\"pricePurposeEnumId\":\"PppList\",\"priceTypeEnumId\":\"PptList\",\"currencyUomId\":\"USD\"}" > /dev/null 2>&1
+        "{\"price\":${price_val},\"pricePurposeEnumId\":\"PppPurchase\",\"priceTypeEnumId\":\"PptList\",\"currencyUomId\":\"USD\"}" > /dev/null 2>&1
 done
 MULTI_PRICES=$(api_get "/rest/s1/mantle/products/${PROD1_ID:-WDG-A}/prices")
 if [ -n "$MULTI_PRICES" ] && is_http_ok; then
