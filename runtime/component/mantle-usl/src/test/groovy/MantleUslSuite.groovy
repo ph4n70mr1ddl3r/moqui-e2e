@@ -21,7 +21,7 @@ import org.moqui.Moqui
 @Suite
 @SelectClasses([ AccountingActivities.class, AssetReservationMultipleThreads.class, OrderProcureToPayBasicFlow.class,
         OrderToCashBasicFlow.class, OrderToCashTime.class, ReturnToResponseBasicFlow.class,
-        WorkPlanToCashBasicFlow.class, RestApiTests.class ])
+        WorkPlanToCashBasicFlow.class, RestApiTests.class, PostalAddressShipmentBugTest.class ])
 class MantleUslSuite {
     @AfterAll
     static void destroyMoqui() {

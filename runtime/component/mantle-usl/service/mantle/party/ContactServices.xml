@@ -748,8 +748,8 @@ along with this software (see the LICENSE.md file). If not, see
                     <if condition="shipmentSetOrigin &amp;&amp; (routeSegment.originPostalContactMechId == null ||
                             routeSegment.shipmentRouteSegmentSeqId == shipmentRouteSegmentSeqId)">
                         <set field="routeSegment.originPostalContactMechId" from="contactMechId"/></if>
-                    <if condition="shipmentSetDest &amp;&amp; routeSegment.destPostalContactMechId == null ||
-                            (routeSegment.shipmentRouteSegmentSeqId == shipmentRouteSegmentSeqId)">
+                    <if condition="shipmentSetDest &amp;&amp; (routeSegment.destPostalContactMechId == null ||
+                            routeSegment.shipmentRouteSegmentSeqId == shipmentRouteSegmentSeqId)">
                         <set field="routeSegment.destPostalContactMechId" from="contactMechId"/></if>
                     <entity-update value-field="routeSegment"/>
                 </iterate>
