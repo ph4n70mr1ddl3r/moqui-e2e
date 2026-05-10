@@ -3967,6 +3967,13 @@ AFTER_LOGGED=$(echo "$AFTER_FAIL" | python3 -c "import sys,json; d=json.load(sys
 if [ "$AFTER_LOGGED" = "True" ]; then sim_pass "Admin login still works (not affected by JohnSmith failures)"
 else sim_fail "Admin locked out after failed attempts!"; fi
 
+# Re-enable the JohnSmith user account so later tests (11lz, 11qa-s) can use it
+JS_USER=$(api_get "/rest/e1/UserAccount?username=JohnSmith&pageSize=1")
+JS_USER_ID=$(echo "$JS_USER" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0].get('userId','')) if isinstance(d,list) and d else print('')" 2>/dev/null)
+if [ -n "$JS_USER_ID" ]; then
+    api_patch "/rest/e1/UserAccount/${JS_USER_ID}" '{"disabled":"N","failureCount":0}' > /dev/null 2>&1 || true
+fi
+
 # ── 11ij. Product category association ────────────────
 step "Edge: Product Category Association"
 if [ -n "${STORE_ID:-}" ]; then
@@ -6410,7 +6417,7 @@ else sim_fail "Whitespace-padded filter caused failure"; fi
 # ── 11pz-w. Payment with non-existent paymentTypeEnumId ──
 step "Edge: Payment With Ghost paymentTypeEnumId"
 GHOST_PMTYPE=$(api_post "/rest/s1/mantle/payments" \
-    '{"paymentTypeEnumId":"GhostPaymentType_99999","fromPartyId":"'"${OUR_ORG:-_NA_}"'","toPartyId":"${OUR_ORG:-_NA_}","amount":10,"amountUomId":"USD"}')
+    '{"paymentTypeEnumId":"GhostPaymentType_99999","fromPartyId":"'"${OUR_ORG:-_NA_}"'","toPartyId":"'"${OUR_ORG:-_NA_}"'","amount":10,"amountUomId":"USD"}') 
 if echo "$GHOST_PMTYPE" | has_error; then sim_pass "Ghost paymentTypeEnumId correctly rejected"
 else sim_fail "Ghost paymentTypeEnumId accepted: $(echo "$GHOST_PMTYPE" | head -c 40)"; fi
 
