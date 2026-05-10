@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -39,7 +40,7 @@ public class UrlResourceReference extends ResourceReference {
         isFileProtocol = true;
         localFile = file;
         try { locationUrl = file.toURI().toURL(); }
-        catch (MalformedURLException e) { throw new BaseException("Error creating URL for file " + file.getAbsolutePath(), e); }
+        catch (MalformedURLException | IllegalArgumentException e) { throw new BaseException("Error creating URL for file " + file.getAbsolutePath(), e); }
     }
 
     @Override
@@ -58,19 +59,19 @@ public class UrlResourceReference extends ResourceReference {
                 }
             }
 
-            try { locationUrl = new URL("file:" + location); }
-            catch (MalformedURLException e) { throw new BaseException("Invalid file url for location " + location, e); }
+            try { locationUrl = URI.create("file:" + location).toURL(); }
+            catch (MalformedURLException | IllegalArgumentException e) { throw new BaseException("Invalid file url for location " + location, e); }
             isFileProtocol = true;
         } else {
             try {
-                locationUrl = new URL(location);
-            } catch (MalformedURLException e) {
+                locationUrl = URI.create(location).toURL();
+            } catch (MalformedURLException | IllegalArgumentException e) {
                 if (logger.isTraceEnabled())
                     logger.trace("Ignoring MalformedURLException for location, trying a local file: " + e.toString());
                 // special case for Windows, try going through a file:
 
-                try { locationUrl = new URL("file:/" + location); }
-                catch (MalformedURLException se) { throw new BaseException("Invalid url for location " + location, e); }
+                try { locationUrl = URI.create("file:/" + location).toURL(); }
+                catch (MalformedURLException | IllegalArgumentException se) { throw new BaseException("Invalid url for location " + location, e); }
             }
 
             isFileProtocol = "file".equals(getUrl().getProtocol());

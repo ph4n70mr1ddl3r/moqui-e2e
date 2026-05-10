@@ -15,6 +15,7 @@ package org.moqui.util;
 
 import java.io.*;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
@@ -245,8 +246,8 @@ public class MClassLoader extends ClassLoader {
                     try {
                         String jarFileName = jarFile.getName();
                         if (jarFileName.contains("\\")) jarFileName = jarFileName.replace('\\', '/');
-                        resourceUrl = new URL("jar:file:" + jarFileName + "!/" + jarEntry);
-                    } catch (MalformedURLException e) {
+                        resourceUrl = URI.create("jar:file:" + jarFileName + "!/" + jarEntry).toURL();
+                    } catch (MalformedURLException | IllegalArgumentException e) {
                         System.out.println("Error making URL for [" + resourceName + "] in jar [" + jarFile + "]: " + e.toString());
                     }
                 }
@@ -314,8 +315,8 @@ public class MClassLoader extends ClassLoader {
                 try {
                     String jarFileName = jarFile.getName();
                     if (jarFileName.contains("\\")) jarFileName = jarFileName.replace('\\', '/');
-                    urlList.add(new URL("jar:file:" + jarFileName + "!/" + jarEntry));
-                } catch (MalformedURLException e) {
+                    urlList.add(URI.create("jar:file:" + jarFileName + "!/" + jarEntry).toURL());
+                } catch (MalformedURLException | IllegalArgumentException e) {
                     System.out.println("Error making URL for [" + resourceName + "] in jar [" + jarFile + "]: " + e.toString());
                 }
             }
@@ -613,8 +614,8 @@ public class MClassLoader extends ClassLoader {
         String seal = mf.getMainAttributes().getValue(Attributes.Name.SEALED);
         if (seal == null) return null;
         try {
-            return new URL(seal);
-        } catch (MalformedURLException e) {
+            return URI.create(seal).toURL();
+        } catch (MalformedURLException | IllegalArgumentException e) {
             return null;
         }
     }

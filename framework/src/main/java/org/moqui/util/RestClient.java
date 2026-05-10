@@ -46,6 +46,7 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.HttpClientTransport;
 import org.eclipse.jetty.client.HttpResponseException;
 import org.eclipse.jetty.client.InputStreamRequestContent;
+import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.client.MultiPartRequestContent;
 import org.eclipse.jetty.client.Request;
 import org.eclipse.jetty.client.Response;
@@ -253,7 +254,7 @@ public class RestClient {
     }
     /** Add a InputStream file part to a multi part request **/
     public RestClient addFilePart(String name, String fileName, InputStream streamContent) {
-        return addFilePart(name, fileName, new InputStreamRequestContent(streamContent), null);
+        return addFilePart(name, fileName, new InputStreamRequestContent("application/octet-stream", streamContent, new ByteBufferPool.Sized(null)), null);
     }
     /** Add file part using Jetty ContentProvider.
      * WARNING: This uses Jetty HTTP Client API objects and may change over time, do not use if alternative will work.
