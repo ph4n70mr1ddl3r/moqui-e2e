@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Headless ERP — Webhook Event SECA Rules
+
+Fires webhook events when key business state changes occur.
+All calls use async="true" so they don't block the transaction.
+
+Strategy: Hook into entity-level status changes (update#EntityName)
+which fire regardless of which service triggered the change.
+-->
+<secas xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-eca-3.xsd">
+
+    <!-- ========================================================= -->
+    <!-- Order Events (via OrderHeader status changes)              -->
+    <!-- ========================================================= -->
+
+    <seca id="HeadlessWebhookOrderPlaced" service="update#mantle.order.OrderHeader" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'OrderPlaced'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'order.placed', payload:[orderId:orderId, orderName:orderName, statusId:'OrderPlaced', currencyUomId:currencyUomId, grandTotal:grandTotal, entryDate:entryDate?.toString()]]"/>
+        </actions>
+    </seca>
+
+    <seca id="HeadlessWebhookOrderApproved" service="update#mantle.order.OrderHeader" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'OrderApproved'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'order.approved', payload:[orderId:orderId, orderName:orderName, statusId:'OrderApproved', grandTotal:grandTotal]]"/>
+        </actions>
+    </seca>
+
+    <seca id="HeadlessWebhookOrderCompleted" service="update#mantle.order.OrderHeader" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'OrderCompleted'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'order.completed', payload:[orderId:orderId, orderName:orderName, statusId:'OrderCompleted', grandTotal:grandTotal]]"/>
+        </actions>
+    </seca>
+
+    <seca id="HeadlessWebhookOrderCancelled" service="update#mantle.order.OrderHeader" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'OrderCancelled'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'order.cancelled', payload:[orderId:orderId, orderName:orderName, statusId:'OrderCancelled', grandTotal:grandTotal]]"/>
+        </actions>
+    </seca>
+
+    <!-- ========================================================= -->
+    <!-- Shipment Events (via Shipment status changes)              -->
+    <!-- ========================================================= -->
+
+    <seca id="HeadlessWebhookShipmentShipped" service="update#mantle.shipment.Shipment" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'ShipShipped'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'shipment.shipped', payload:[shipmentId:shipmentId, statusId:'ShipShipped', shipmentTypeEnumId:shipmentTypeEnumId, estimatedShipDate:estimatedShipDate?.toString(), estimatedDeliveryDate:estimatedDeliveryDate?.toString()]]"/>
+        </actions>
+    </seca>
+
+    <seca id="HeadlessWebhookShipmentDelivered" service="update#mantle.shipment.Shipment" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'ShipDelivered'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'shipment.delivered', payload:[shipmentId:shipmentId, statusId:'ShipDelivered']]"/>
+        </actions>
+    </seca>
+
+    <!-- ========================================================= -->
+    <!-- Inventory Events (via Asset status changes)                -->
+    <!-- ========================================================= -->
+
+    <seca id="HeadlessWebhookInventoryAvailable" service="update#mantle.product.asset.Asset" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'AssetAvailable'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'inventory.updated', payload:[assetId:assetId, productId:productId, facilityId:facilityId, quantityOnHandTotal:quantityOnHandTotal, availableToPromiseTotal:availableToPromiseTotal, statusId:'AssetAvailable']]"/>
+        </actions>
+    </seca>
+
+    <!-- ========================================================= -->
+    <!-- Payment Events (via Payment status changes)                -->
+    <!-- ========================================================= -->
+
+    <seca id="HeadlessWebhookPaymentDelivered" service="update#mantle.account.payment.Payment" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'PmntDelivered'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'payment.received', payload:[paymentId:paymentId, amount:amount, currencyUomId:currencyUomId, paymentTypeEnumId:paymentTypeEnumId, fromPartyId:fromPartyId, toPartyId:toPartyId, statusId:'PmntDelivered']]"/>
+        </actions>
+    </seca>
+
+    <!-- ========================================================= -->
+    <!-- Invoice Events (via Invoice status changes)                -->
+    <!-- ========================================================= -->
+
+    <seca id="HeadlessWebhookInvoiceReady" service="update#mantle.account.invoice.Invoice" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'InvoiceReady'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'invoice.created', payload:[invoiceId:invoiceId, invoiceTypeEnumId:invoiceTypeEnumId, partyIdFrom:partyIdFrom, partyIdTo:partyIdTo, invoiceDate:invoiceDate?.toString(), dueDate:dueDate?.toString(), invoiceTotal:invoiceTotal]]"/>
+        </actions>
+    </seca>
+
+    <seca id="HeadlessWebhookInvoiceSent" service="update#mantle.account.invoice.Invoice" when="tx-commit">
+        <condition><expression>statusChanged &amp;&amp; statusId == 'InvoiceInProcess'</expression></condition>
+        <actions>
+            <service-call name="headless.webhook.WebhookServices.fire#WebhookEvent" async="true"
+                    in-map="[eventName:'invoice.sent', payload:[invoiceId:invoiceId, statusId:'InvoiceInProcess']]"/>
+        </actions>
+    </seca>
+
+</secas>

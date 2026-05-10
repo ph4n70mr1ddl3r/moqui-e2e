@@ -39,7 +39,7 @@
             <set field="newWebhook.createdByUserId" from="ec.user.userId"/>
             <set field="newWebhook.disabled" value="N"/>
             <entity-sequenced-id-primary value-field="newWebhook"/>
-            <entity-create value-field="newWebhook"/>
+            <entity-create value-field="newWebhook" disable-authz="true"/>
             <set field="webhookId" from="newWebhook.webhookId"/>
         </actions>
     </service>
@@ -57,7 +57,7 @@
             <parameter name="disabled"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="headless.webhook.WebhookEndpoint" value-field="webhook" for-update="true"/>
+            <entity-find-one entity-name="headless.webhook.WebhookEndpoint" value-field="webhook" for-update="true" disable-authz="true"/>
             <if condition="webhook">
                 <if condition="name"><set field="webhook.name" from="name"/></if>
                 <if condition="description"><set field="webhook.description" from="description"/></if>
@@ -66,7 +66,7 @@
                 <if condition="active"><set field="webhook.active" from="active"/></if>
                 <if condition="contentType"><set field="webhook.contentType" from="contentType"/></if>
                 <if condition="disabled"><set field="webhook.disabled" from="disabled"/></if>
-                <entity-update value-field="webhook"/>
+                <entity-update value-field="webhook" disable-authz="true"/>
             </if>
         </actions>
     </service>
@@ -75,17 +75,18 @@
     <!-- Webhook Event Firing                                       -->
     <!-- ========================================================= -->
 
-    <service verb="fire" noun="WebhookEvent" multi="true" retry="true">
+    <service verb="fire" noun="WebhookEvent" multi="true" retry="true" authenticate="anonymous-all">
         <description>
             Fire a webhook event to all matching endpoints.
-            This service is meant to be called async (queued) from other services.
+            This service is meant to be called async (queued) from SECA rules.
+            Uses anonymous-all auth so async worker threads can access entities.
         </description>
         <in-parameters>
             <parameter name="eventName" required="true"/>
             <parameter name="payload" type="Map" required="true"/>
         </in-parameters>
         <actions>
-            <entity-find entity-name="headless.webhook.WebhookEndpoint" list="webhooks">
+            <entity-find entity-name="headless.webhook.WebhookEndpoint" list="webhooks" disable-authz="true">
                 <econdition field-name="active" value="Y"/>
                 <econdition field-name="disabled" operator="not-equals" value="Y"/>
                 <econdition field-name="subscribedEvents" operator="like" from="'%' + eventName + '%'"/>
@@ -98,10 +99,11 @@
         </actions>
     </service>
 
-    <service verb="deliver" noun="Webhook" retry="true">
+    <service verb="deliver" noun="Webhook" retry="true" authenticate="anonymous-all">
         <description>
             Deliver a single webhook payload to a single endpoint.
             Records the result in WebhookDelivery.
+            Uses anonymous-all auth so async worker threads can access entities.
         </description>
         <in-parameters>
             <parameter name="webhookId" required="true"/>
@@ -109,7 +111,7 @@
             <parameter name="payload" type="Map" required="true"/>
         </in-parameters>
         <actions>
-            <entity-find-one entity-name="headless.webhook.WebhookEndpoint" value-field="webhook"/>
+            <entity-find-one entity-name="headless.webhook.WebhookEndpoint" value-field="webhook" disable-authz="true"/>
             <if condition="!webhook || webhook.disabled == 'Y' || webhook.active != 'Y'">
                 <return message="Webhook ${webhookId} not found or inactive"/></if>
 
@@ -124,7 +126,7 @@
             <set field="newDelivery.statusEnumId" value="WdsPending"/>
             <set field="newDelivery.attemptCount" from="1"/>
             <entity-sequenced-id-primary value-field="newDelivery"/>
-            <entity-create value-field="newDelivery"/>
+            <entity-create value-field="newDelivery" disable-authz="true"/>
             <set field="deliveryId" from="newDelivery.deliveryId"/>
 
             <!-- Deliver via HTTP POST -->
@@ -162,7 +164,7 @@
                         def is = conn.getInputStream()
                         responseBody = is.getText('UTF-8').take(10240)
                         is.close()
-                        def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).one()
+                        def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).disableAuthz().one()
                         if (upd) {
                             upd.statusCode = httpStatus
                             upd.responseBody = responseBody
@@ -174,7 +176,7 @@
                     } else {
                         def es = conn.getErrorStream()
                         if (es) responseBody = es.getText('UTF-8').take(10240)
-                        def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).one()
+                        def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).disableAuthz().one()
                         if (upd) {
                             upd.statusCode = httpStatus
                             upd.responseBody = responseBody
@@ -185,7 +187,7 @@
                     }
                 } catch (Exception e) {
                     long durationMs = System.currentTimeMillis() - startMs
-                    def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).one()
+                    def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).disableAuthz().one()
                     if (upd) {
                         upd.statusCode = httpStatus
                         upd.responseBody = e.message?.take(10240) ?: 'Unknown error'
@@ -207,7 +209,7 @@
             <parameter name="maxRetries" type="Integer" default-value="5"/>
         </in-parameters>
         <actions>
-            <entity-find entity-name="headless.webhook.WebhookDelivery" list="failed">
+            <entity-find entity-name="headless.webhook.WebhookDelivery" list="failed" disable-authz="true">
                 <econdition field-name="statusEnumId" value="WdsFailed"/>
                 <econdition field-name="attemptCount" operator="less-equals" from="maxRetries"/>
                 <order-by field-name="createdDate"/>
@@ -215,7 +217,7 @@
             <iterate list="failed" entry="delivery">
                 <set field="delivery.attemptCount" from="delivery.attemptCount + 1"/>
                 <set field="delivery.statusEnumId" value="WdsPending"/>
-                <entity-update value-field="delivery"/>
+                <entity-update value-field="delivery" disable-authz="true"/>
                 <set field="parsedPayload" from="new groovy.json.JsonSlurper().parseText(delivery.payload as String) as Map"/>
                 <service-call name="headless.webhook.WebhookServices.deliver#Webhook"
                         in-map="[webhookId:delivery.webhookId, eventName:delivery.eventName, payload:parsedPayload]"
