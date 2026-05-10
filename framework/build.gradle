@@ -93,6 +93,9 @@ dependencies {
     // H2 Database
     api 'com.h2database:h2:2.4.240' // MPL 2.0, EPL 1.0
 
+    // PostgreSQL Database
+    api 'org.postgresql:postgresql:42.7.5' // BSD-like
+
     // Java Specifications
     api 'jakarta.transaction:jakarta.transaction-api:2.0.1'
     api 'javax.cache:cache-api:1.1.1'

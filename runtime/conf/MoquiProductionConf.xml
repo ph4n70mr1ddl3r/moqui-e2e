@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!-- Moqui Headless API Server Configuration -->
+<!-- Moqui Headless API Server — Production Configuration (PostgreSQL) -->
 <moqui-conf xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/moqui-conf-3.xsd">
 
     <default-property name="instance_purpose" value="production"/>
@@ -12,12 +12,23 @@
     <!-- Only seed+install on empty DB — no demo -->
     <default-property name="entity_empty_db_load" value="seed,seed-initial,install"/>
 
+    <!-- PostgreSQL connection — override via env vars or -D system properties -->
+    <default-property name="entity_ds_db_conf" value="postgres"/>
+    <default-property name="entity_ds_host" value="localhost"/>
+    <default-property name="entity_ds_port" value="5432"/>
+    <default-property name="entity_ds_database" value="headless_erp"/>
+    <default-property name="entity_ds_user" value="riddler"/>
+    <default-property name="entity_ds_password" value="headless_erp" is-secret="true"/>
+    <default-property name="entity_ds_crypt_pass" value="MoquiHeadlessERP"/>
+
     <entity-facade crypt-pass="${entity_ds_crypt_pass}" query-stats="true">
-        <datasource group-name="transactional"
-                inline-jdbc-jdbc-driver="org.h2.Driver"
-                inline-jdbc-jdbc-uri="jdbc:h2:${moqui_runtime}/db/h2/${entity_ds_database};lock_timeout=30000"
-                inline-jdbc-jdbc-username="sa"
-                inline-jdbc-jdbc-password="sa"/>
+        <datasource group-name="transactional" database-conf-name="${entity_ds_db_conf}"
+                schema-name="public" startup-add-missing="true" runtime-add-missing="false">
+            <inline-jdbc jdbc-uri="jdbc:postgresql://${entity_ds_host}:${entity_ds_port}/${entity_ds_database}"
+                    jdbc-username="${entity_ds_user}"
+                    jdbc-password="${entity_ds_password}"
+                    pool-max="50" pool-min="10"/>
+        </datasource>
     </entity-facade>
 
     <server-stats stats-skip-condition="pathInfo?.startsWith('/rpc') || pathInfo?.startsWith('/rest') || pathInfo?.startsWith('/status')"
