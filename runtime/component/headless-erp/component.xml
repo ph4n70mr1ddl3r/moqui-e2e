@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Headless ERP — custom component for API-first ERP operations.
+
+Provides API key authentication, webhook delivery, audit logging,
+and dashboard/report services on top of the Mantle business layer.
+-->
+<component xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/moqui-conf-3.xsd"
+        name="headless-erp" version="0.1.0">
+    <depends-on name="mantle-usl"/>
+</component>

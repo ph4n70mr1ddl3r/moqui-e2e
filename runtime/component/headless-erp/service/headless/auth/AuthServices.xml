@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <!-- ========================================================= -->
+    <!-- API Key CRUD                                               -->
+    <!-- ========================================================= -->
+
+    <service verb="create" noun="ApiKey">
+        <description>
+            Generate a new API key. Returns the raw key ONE TIME only —
+            it is never stored, only the SHA-256 hash is persisted.
+        </description>
+        <in-parameters>
+            <parameter name="userId" required="true"/>
+            <parameter name="name" required="true"/>
+            <parameter name="description"/>
+            <parameter name="scopes" default-value="read,write"/>
+            <parameter name="partyId"/>
+            <parameter name="fromDate" type="Timestamp" default="ec.user.nowTimestamp"/>
+            <parameter name="thruDate" type="Timestamp"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="apiKeyId" required="true"/>
+            <parameter name="rawKey" required="true">
+                <description>The raw API key — save this, it cannot be retrieved later</description>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <!-- Generate secure random 256-bit key -->
+            <set field="randomBytes" from="new byte[32]"/>
+            <script>new java.security.SecureRandom().nextBytes(context.get('randomBytes'))</script>
+            <set field="rawKey" from="'hlp_' + org.apache.commons.codec.binary.Base64.encodeBase64URLSafeString(context.get('randomBytes'))"/>
+            <set field="keyHash" from="org.apache.commons.codec.digest.DigestUtils.sha256Hex(context.get('rawKey'))"/>
+            <set field="keyPrefix" from="context.get('rawKey').substring(0, 8)"/>
+
+            <!-- Create the ApiKey entity -->
+            <set field="newKey" from="ec.entity.makeValue('headless.auth.ApiKey')"/>
+            <set field="newKey.userId" from="userId"/>
+            <set field="newKey.keyHash" from="keyHash"/>
+            <set field="newKey.keyPrefix" from="keyPrefix"/>
+            <set field="newKey.name" from="name"/>
+            <set field="newKey.description" from="description"/>
+            <set field="newKey.scopes" from="scopes"/>
+            <set field="newKey.partyId" from="partyId"/>
+            <set field="newKey.fromDate" from="fromDate"/>
+            <set field="newKey.thruDate" from="thruDate"/>
+            <set field="newKey.disabled" value="N"/>
+            <entity-sequenced-id-primary value-field="newKey"/>
+            <entity-create value-field="newKey"/>
+            <set field="apiKeyId" from="newKey.apiKeyId"/>
+        </actions>
+    </service>
+
+    <service verb="validate" noun="ApiKey">
+        <description>
+            Validate a raw API key and return the associated user ID if valid.
+        </description>
+        <in-parameters>
+            <parameter name="rawKey" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="userId"/>
+            <parameter name="apiKeyId"/>
+            <parameter name="scopes"/>
+            <parameter name="partyId"/>
+            <parameter name="valid" type="Boolean"/>
+        </out-parameters>
+        <actions>
+            <set field="keyHash" from="org.apache.commons.codec.digest.DigestUtils.sha256Hex(rawKey)"/>
+            <entity-find entity-name="headless.auth.ApiKey" list="keyList">
+                <econdition field-name="keyHash" from="keyHash"/>
+                <econdition field-name="disabled" operator="not-equals" value="Y"/>
+                <date-filter/>
+            </entity-find>
+            <if condition="keyList">
+                <set field="apiKey" from="keyList[0]"/>
+                <set field="valid" from="true"/>
+                <set field="userId" from="apiKey.userId"/>
+                <set field="apiKeyId" from="apiKey.apiKeyId"/>
+                <set field="scopes" from="apiKey.scopes"/>
+                <set field="partyId" from="apiKey.partyId"/>
+                <!-- touch lastUsedDate -->
+                <entity-find-one entity-name="headless.auth.ApiKey" value-field="keyToUpdate">
+                    <field-map field-name="apiKeyId" from="apiKey.apiKeyId"/>
+                </entity-find-one>
+                <if condition="keyToUpdate">
+                    <set field="keyToUpdate.lastUsedDate" from="ec.user.nowTimestamp"/>
+                    <entity-update value-field="keyToUpdate"/>
+                </if>
+                <else>
+                    <set field="valid" from="false"/>
+                </else>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="revoke" noun="ApiKey">
+        <description>Revoke an API key by setting thruDate to now.</description>
+        <in-parameters>
+            <parameter name="apiKeyId" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="headless.auth.ApiKey" value-field="apiKey"/>
+            <if condition="apiKey">
+                <set field="apiKey.thruDate" from="ec.user.nowTimestamp"/>
+                <entity-update value-field="apiKey"/>
+            </if>
+        </actions>
+    </service>
+
+    <service verb="rotate" noun="ApiKey">
+        <description>Revoke the current key and issue a new one for the same user and scope.</description>
+        <in-parameters>
+            <parameter name="apiKeyId" required="true"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="newApiKeyId"/>
+            <parameter name="rawKey"/>
+        </out-parameters>
+        <actions>
+            <entity-find-one entity-name="headless.auth.ApiKey" value-field="existing"/>
+            <if condition="existing">
+                <!-- revoke old -->
+                <set field="existing.thruDate" from="ec.user.nowTimestamp"/>
+                <entity-update value-field="existing"/>
+                <!-- create new with same params -->
+                <service-call name="headless.auth.AuthServices.create#ApiKey"
+                        in-map="[userId:existing.userId, name:existing.name + ' (rotated)', description:existing.description, scopes:existing.scopes, partyId:existing.partyId]"
+                        out-map="createOut"/>
+                <set field="newApiKeyId" from="createOut.apiKeyId"/>
+                <set field="rawKey" from="createOut.rawKey"/>
+            </if>
+        </actions>
+    </service>
+
+</services>

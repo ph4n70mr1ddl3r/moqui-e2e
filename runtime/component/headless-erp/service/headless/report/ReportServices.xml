@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <!-- ========================================================= -->
+    <!-- Audit Log                                                   -->
+    <!-- ========================================================= -->
+
+    <service verb="record" noun="ApiCall">
+        <description>Record an API call in the audit log.</description>
+        <in-parameters>
+            <parameter name="userId"/>
+            <parameter name="apiKeyId"/>
+            <parameter name="method"/>
+            <parameter name="path"/>
+            <parameter name="statusCode" type="Integer"/>
+            <parameter name="sourceIp"/>
+            <parameter name="userAgent"/>
+            <parameter name="requestBody"/>
+            <parameter name="durationMs" type="Integer"/>
+        </in-parameters>
+        <actions>
+            <set field="newAudit" from="ec.entity.makeValue('headless.audit.ApiAuditLog')"/>
+            <set field="newAudit.userId" from="userId"/>
+            <set field="newAudit.apiKeyId" from="apiKeyId"/>
+            <set field="newAudit.method" from="method"/>
+            <set field="newAudit.path" from="path"/>
+            <set field="newAudit.statusCode" from="statusCode"/>
+            <set field="newAudit.sourceIp" from="sourceIp"/>
+            <set field="newAudit.userAgent" from="userAgent"/>
+            <set field="newAudit.requestBody" from="requestBody"/>
+            <set field="newAudit.durationMs" from="durationMs"/>
+            <entity-sequenced-id-primary value-field="newAudit"/>
+            <entity-create value-field="newAudit"/>
+        </actions>
+    </service>
+
+    <!-- ========================================================= -->
+    <!-- Dashboard / Stats                                          -->
+    <!-- ========================================================= -->
+
+    <service verb="get" noun="DashboardStats">
+        <description>Aggregate dashboard statistics for the headless ERP.</description>
+        <out-parameters>
+            <parameter name="stats" type="Map">
+                <parameter name="orderCount" type="Long"/>
+                <parameter name="orderOpenCount" type="Long"/>
+                <parameter name="revenueTotal" type="BigDecimal"/>
+                <parameter name="productCount" type="Long"/>
+                <parameter name="partyCount" type="Long"/>
+                <parameter name="shipmentPendingCount" type="Long"/>
+                <parameter name="apiKeyCount" type="Long"/>
+                <parameter name="webhookCount" type="Long"/>
+                <parameter name="webhookFailedCount" type="Long"/>
+            </parameter>
+        </out-parameters>
+        <actions>
+            <set field="stats" from="[:]"/>
+
+            <entity-find-count entity-name="mantle.order.OrderHeader" count-field="stats.orderCount"/>
+            <entity-find-count entity-name="mantle.order.OrderHeader" count-field="stats.orderOpenCount">
+                <econdition field-name="statusId" operator="in" from="['OrderOpen', 'OrderProposed', 'OrderApproved', 'OrderInProcess']"/>
+            </entity-find-count>
+            <entity-find-count entity-name="mantle.product.Product" count-field="stats.productCount"/>
+            <entity-find-count entity-name="mantle.party.Party" count-field="stats.partyCount"/>
+            <entity-find-count entity-name="headless.auth.ApiKey" count-field="stats.apiKeyCount">
+                <econdition field-name="disabled" operator="not-equals" value="Y"/>
+                <date-filter/>
+            </entity-find-count>
+            <entity-find-count entity-name="headless.webhook.WebhookEndpoint" count-field="stats.webhookCount">
+                <econdition field-name="disabled" operator="not-equals" value="Y"/>
+            </entity-find-count>
+            <entity-find-count entity-name="headless.webhook.WebhookDelivery" count-field="stats.webhookFailedCount">
+                <econdition field-name="statusEnumId" value="WdsFailed"/>
+            </entity-find-count>
+
+            <!-- Revenue from completed orders -->
+            <entity-find entity-name="mantle.order.OrderHeader" list="completedOrders">
+                <econdition field-name="statusId" value="OrderCompleted"/>
+            </entity-find>
+            <set field="stats.revenueTotal" from="completedOrders?.sum { it.grandTotal ?: BigDecimal.ZERO } ?: BigDecimal.ZERO"/>
+        </actions>
+    </service>
+
+    <service verb="get" noun="RecentActivity">
+        <description>Return the most recent activity for an activity feed.</description>
+        <in-parameters>
+            <parameter name="limit" type="Integer" default-value="20"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="recentOrders" type="List"/>
+            <parameter name="recentShipments" type="List"/>
+            <parameter name="recentWebhooks" type="List"/>
+            <parameter name="recentApiCalls" type="List"/>
+        </out-parameters>
+        <actions>
+            <entity-find entity-name="mantle.order.OrderHeader" list="recentOrders" limit="limit">
+                <order-by field-name="entryDate DESC"/>
+            </entity-find>
+            <entity-find entity-name="headless.webhook.WebhookDeliveryDetail" list="recentWebhooks" limit="limit">
+                <order-by field-name="createdDate DESC"/>
+            </entity-find>
+            <entity-find entity-name="headless.audit.ApiAuditLog" list="recentApiCalls" limit="limit">
+                <order-by field-name="createdDate DESC"/>
+            </entity-find>
+        </actions>
+    </service>
+
+    <!-- ========================================================= -->
+    <!-- Health Check                                               -->
+    <!-- ========================================================= -->
+
+    <service verb="get" noun="HealthStatus">
+        <description>Return system health status for load balancers and monitoring.</description>
+        <out-parameters>
+            <parameter name="status" required="true"/>
+            <parameter name="details" type="Map"/>
+        </out-parameters>
+        <actions>
+            <set field="status" from="'UP'"/>
+            <set field="details" from="[timestamp:ec.user.nowTimestamp.toString(), version:'0.1.0']"/>
+            <!-- Quick DB connectivity check -->
+            <entity-find-one entity-name="moqui.security.UserAccount" value-field="testUser">
+                <field-map field-name="userId" value="ADMIN_USER"/>
+            </entity-find-one>
+            <if condition="!testUser">
+                <set field="status" from="'DOWN'"/>
+                <set field="details.error" from="'Database query failed'"/>
+            </if>
+        </actions>
+    </service>
+
+</services>

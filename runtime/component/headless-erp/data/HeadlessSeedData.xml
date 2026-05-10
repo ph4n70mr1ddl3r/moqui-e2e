@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity-facade-xml type="seed">
+    <!--
+        Seed data for the headless-erp component.
+
+        Security groups and artifact authz for API consumers.
+        Add to your MoquiDevConf.xml or load via:
+          gradle load -Ptypes=seed
+    -->
+
+    <!-- ============================================================ -->
+    <!-- API_USER group: read/write access to Mantle REST endpoints   -->
+    <!-- via the headless REST API, but no admin tools.               -->
+    <!-- ============================================================ -->
+
+    <moqui.security.UserGroup userGroupId="API_USER" description="Headless ERP API consumer"/>
+
+    <!-- Mantle REST API paths: read + write -->
+    <moqui.security.ArtifactGroup artifactGroupId="MANTLE_REST_RW" description="Mantle REST API read/write"/>
+    <moqui.security.ArtifactGroupMember artifactGroupId="MANTLE_REST_RW"
+            artifactName="/rest/s1/mantle/.*" nameIsPattern="Y"
+            artifactTypeEnumId="AT_REST_PATH" inheritAuthz="Y"/>
+    <moqui.security.ArtifactAuthz artifactAuthzId="MANTLE_REST_RW_API_USER"
+            userGroupId="API_USER" artifactGroupId="MANTLE_REST_RW"
+            authzTypeEnumId="AUTHZT_ALWAYS" authzActionEnumId="AUTHZA_ALL"/>
+
+    <!-- Headless REST API paths: full access -->
+    <moqui.security.ArtifactGroup artifactGroupId="HEADLESS_REST" description="Headless ERP REST API"/>
+    <moqui.security.ArtifactGroupMember artifactGroupId="HEADLESS_REST"
+            artifactName="/rest/s1/headless/.*" nameIsPattern="Y"
+            artifactTypeEnumId="AT_REST_PATH" inheritAuthz="Y"/>
+    <moqui.security.ArtifactAuthz artifactAuthzId="HEADLESS_REST_API_USER"
+            userGroupId="API_USER" artifactGroupId="HEADLESS_REST"
+            authzTypeEnumId="AUTHZT_ALWAYS" authzActionEnumId="AUTHZA_ALL"/>
+
+    <!-- Mantle entities: read + create + update (no delete for API_USER) -->
+    <moqui.security.ArtifactGroup artifactGroupId="MANTLE_ENTITIES_RW" description="Mantle entities read/write"/>
+    <moqui.security.ArtifactGroupMember artifactGroupId="MANTLE_ENTITIES_RW"
+            artifactName="mantle\..*" nameIsPattern="Y"
+            artifactTypeEnumId="AT_ENTITY" inheritAuthz="Y"/>
+    <moqui.security.ArtifactAuthz artifactAuthzId="MANTLE_ENTITIES_RW_API_USER"
+            userGroupId="API_USER" artifactGroupId="MANTLE_ENTITIES_RW"
+            authzTypeEnumId="AUTHZT_ALWAYS" authzActionEnumId="AUTHZA_ALL"/>
+
+    <!-- Mantle services: full access -->
+    <moqui.security.ArtifactGroup artifactGroupId="MANTLE_SERVICES" description="Mantle services"/>
+    <moqui.security.ArtifactGroupMember artifactGroupId="MANTLE_SERVICES"
+            artifactName="mantle\..*" nameIsPattern="Y"
+            artifactTypeEnumId="AT_SERVICE" inheritAuthz="Y"/>
+    <moqui.security.ArtifactAuthz artifactAuthzId="MANTLE_SERVICES_API_USER"
+            userGroupId="API_USER" artifactGroupId="MANTLE_SERVICES"
+            authzTypeEnumId="AUTHZT_ALWAYS" authzActionEnumId="AUTHZA_ALL"/>
+
+    <!-- Headless entities: full access -->
+    <moqui.security.ArtifactGroup artifactGroupId="HEADLESS_ENTITIES" description="Headless ERP entities"/>
+    <moqui.security.ArtifactGroupMember artifactGroupId="HEADLESS_ENTITIES"
+            artifactName="headless\..*" nameIsPattern="Y"
+            artifactTypeEnumId="AT_ENTITY" inheritAuthz="Y"/>
+    <moqui.security.ArtifactAuthz artifactAuthzId="HEADLESS_ENTITIES_API_USER"
+            userGroupId="API_USER" artifactGroupId="HEADLESS_ENTITIES"
+            authzTypeEnumId="AUTHZT_ALWAYS" authzActionEnumId="AUTHZA_ALL"/>
+
+    <!-- Headless services: full access -->
+    <moqui.security.ArtifactGroup artifactGroupId="HEADLESS_SERVICES" description="Headless ERP services"/>
+    <moqui.security.ArtifactGroupMember artifactGroupId="HEADLESS_SERVICES"
+            artifactName="headless\..*" nameIsPattern="Y"
+            artifactTypeEnumId="AT_SERVICE" inheritAuthz="Y"/>
+    <moqui.security.ArtifactAuthz artifactAuthzId="HEADLESS_SERVICES_API_USER"
+            userGroupId="API_USER" artifactGroupId="HEADLESS_SERVICES"
+            authzTypeEnumId="AUTHZT_ALWAYS" authzActionEnumId="AUTHZA_ALL"/>
+
+    <!-- ============================================================ -->
+    <!-- WEBHOOK_DELIVERER group: for internal service that delivers  -->
+    <!-- webhooks (needs entity access to WebhookDelivery, etc.)      -->
+    <!-- ============================================================ -->
+
+    <moqui.security.UserGroup userGroupId="WEBHOOK_DELIVERER" description="Webhook delivery service"/>
+
+    <!-- ============================================================ -->
+    <!-- Enumeration types for webhook event names                    -->
+    <!-- ============================================================ -->
+
+    <moqui.basic.EnumerationType description="Webhook Event" enumTypeId="WebhookEvent"/>
+    <moqui.basic.Enumeration description="Order Placed" enumId="WeOrderPlaced" enumTypeId="WebhookEvent" sequenceNum="1" enumCode="order.placed"/>
+    <moqui.basic.Enumeration description="Order Approved" enumId="WeOrderApproved" enumTypeId="WebhookEvent" sequenceNum="2" enumCode="order.approved"/>
+    <moqui.basic.Enumeration description="Order Cancelled" enumId="WeOrderCancelled" enumTypeId="WebhookEvent" sequenceNum="3" enumCode="order.cancelled"/>
+    <moqui.basic.Enumeration description="Order Completed" enumId="WeOrderCompleted" enumTypeId="WebhookEvent" sequenceNum="4" enumCode="order.completed"/>
+    <moqui.basic.Enumeration description="Shipment Shipped" enumId="WeShipmentShipped" enumTypeId="WebhookEvent" sequenceNum="10" enumCode="shipment.shipped"/>
+    <moqui.basic.Enumeration description="Shipment Delivered" enumId="WeShipmentDelivered" enumTypeId="WebhookEvent" sequenceNum="11" enumCode="shipment.delivered"/>
+    <moqui.basic.Enumeration description="Inventory Updated" enumId="WeInventoryUpdated" enumTypeId="WebhookEvent" sequenceNum="20" enumCode="inventory.updated"/>
+    <moqui.basic.Enumeration description="Payment Received" enumId="WePaymentReceived" enumTypeId="WebhookEvent" sequenceNum="30" enumCode="payment.received"/>
+    <moqui.basic.Enumeration description="Invoice Created" enumId="WeInvoiceCreated" enumTypeId="WebhookEvent" sequenceNum="40" enumCode="invoice.created"/>
+
+</entity-facade-xml>

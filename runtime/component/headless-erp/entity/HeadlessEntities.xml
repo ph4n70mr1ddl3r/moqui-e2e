@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Headless ERP — custom entities for API key auth, webhooks, audit, and rate limiting.
+-->
+<entities xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/entity-definition-3.xsd">
+
+    <!-- ========================================================= -->
+    <!-- headless.auth — API Key Authentication                    -->
+    <!-- ========================================================= -->
+
+    <entity entity-name="ApiKey" package="headless.auth" cache="never"
+            short-alias="apiKeys">
+        <description>
+            API keys for machine-to-machine authentication.
+            Each key is tied to a UserAccount and optionally a party/facility scope.
+        </description>
+        <field name="apiKeyId" type="id" is-pk="true"/>
+        <field name="userId" type="id">
+            <description>The Moqui user this key authenticates as</description>
+        </field>
+        <field name="keyHash" type="text-medium">
+            <description>SHA-256 hash of the raw API key (the raw key is never stored)</description>
+        </field>
+        <field name="keyPrefix" type="text-short">
+            <description>First 8 characters of the raw key for identification without revealing the key</description>
+        </field>
+        <field name="name" type="text-medium">
+            <description>Human-readable label for this key</description>
+        </field>
+        <field name="description" type="text-long"/>
+        <field name="scopes" type="text-medium">
+            <description>Comma-separated scope tokens: read,write,admin,webhook,etc.</description>
+        </field>
+        <field name="partyId" type="id">
+            <description>Optional: restrict this key to a specific party context</description>
+        </field>
+        <field name="fromDate" type="date-time"/>
+        <field name="thruDate" type="date-time"/>
+        <field name="lastUsedDate" type="date-time"/>
+        <field name="disabled" type="text-indicator"/>
+        <relationship type="one" related="moqui.security.UserAccount"/>
+        <relationship type="one-nofk" related="mantle.party.Party" short-alias="party"/>
+        <master>
+            <detail relationship="userAccount"/>
+            <detail relationship="party"/>
+        </master>
+        <index name="APIKEY_KEYHASH"><index-field name="keyHash"/></index>
+        <index name="APIKEY_PREFIX"><index-field name="keyPrefix"/></index>
+    </entity>
+
+    <!-- ========================================================= -->
+    <!-- headless.webhook — Webhook Registration & Delivery         -->
+    <!-- ========================================================= -->
+
+    <entity entity-name="WebhookEndpoint" package="headless.webhook" cache="never"
+            short-alias="webhooks">
+        <description>
+            Outbound webhook registration. When subscribed events fire,
+            the headless ERP POSTs a JSON payload to the target URL.
+        </description>
+        <field name="webhookId" type="id" is-pk="true"/>
+        <field name="name" type="text-medium"/>
+        <field name="description" type="text-long"/>
+        <field name="targetUrl" type="text-medium">
+            <description>The URL to POST event payloads to</description>
+        </field>
+        <field name="secret" type="text-medium">
+            <description>HMAC-SHA256 signing secret for payload verification by the receiver</description>
+        </field>
+        <field name="subscribedEvents" type="text-long">
+            <description>Comma-separated event names: order.placed,order.approved,shipment.shipped,inventory.updated,etc.</description>
+        </field>
+        <field name="active" type="text-indicator" default="'Y'"/>
+        <field name="contentType" type="text-short" default="'application/json'">
+            <description>Content-Type for the HTTP POST</description>
+        </field>
+        <field name="createdByUserId" type="id"/>
+        <field name="createdDate" type="date-time" default="ec.user.nowTimestamp"/>
+        <field name="disabled" type="text-indicator"/>
+        <relationship type="one" related="moqui.security.UserAccount" short-alias="createdBy">
+            <key-map field-name="createdByUserId"/></relationship>
+        <master>
+            <detail relationship="createdBy"/>
+        </master>
+    </entity>
+
+    <entity entity-name="WebhookDelivery" package="headless.webhook" cache="never">
+        <description>
+            Individual delivery attempt for a webhook event.
+            Stores request/response for debugging and retry logic.
+        </description>
+        <field name="deliveryId" type="id" is-pk="true"/>
+        <field name="webhookId" type="id"/>
+        <field name="eventName" type="text-medium">
+            <description>The event that triggered this delivery</description>
+        </field>
+        <field name="payload" type="text-very-long">
+            <description>JSON payload sent to the target</description>
+        </field>
+        <field name="statusCode" type="number-integer">
+            <description>HTTP status code from the target response</description>
+        </field>
+        <field name="responseBody" type="text-very-long">
+            <description>Response body from the target (truncated at 10KB)</description>
+        </field>
+        <field name="attemptCount" type="number-integer" default="1"/>
+        <field name="nextRetryDate" type="date-time"/>
+        <field name="deliveredDate" type="date-time"/>
+        <field name="statusEnumId" type="id">
+            <description>Pending,Delivered,Failed</description>
+        </field>
+        <field name="durationMs" type="number-integer">
+            <description>Round-trip time in milliseconds</description>
+        </field>
+        <field name="createdDate" type="date-time" default="ec.user.nowTimestamp"/>
+        <relationship type="one" related="headless.webhook.WebhookEndpoint" short-alias="webhook"/>
+        <relationship type="one" title="WebhookDeliveryStatus" related="moqui.basic.Enumeration" short-alias="status">
+            <key-map field-name="statusEnumId"/></relationship>
+        <master>
+            <detail relationship="webhook"/>
+        </master>
+        <seed-data>
+            <moqui.basic.EnumerationType description="Webhook Delivery Status" enumTypeId="WebhookDeliveryStatus"/>
+            <moqui.basic.Enumeration description="Pending" enumId="WdsPending" enumTypeId="WebhookDeliveryStatus" sequenceNum="1"/>
+            <moqui.basic.Enumeration description="Delivered" enumId="WdsDelivered" enumTypeId="WebhookDeliveryStatus" sequenceNum="2"/>
+            <moqui.basic.Enumeration description="Failed" enumId="WdsFailed" enumTypeId="WebhookDeliveryStatus" sequenceNum="3"/>
+        </seed-data>
+    </entity>
+
+    <!-- ========================================================= -->
+    <!-- headless.audit — API Audit Trail                          -->
+    <!-- ========================================================= -->
+
+    <entity entity-name="ApiAuditLog" package="headless.audit" cache="never">
+        <description>
+            Records every API call for compliance and debugging.
+            Write-heavy; consider partitioning or archiving in production.
+        </description>
+        <field name="auditId" type="id" is-pk="true"/>
+        <field name="userId" type="id"/>
+        <field name="apiKeyId" type="id">
+            <description>If authenticated via API key, record which one</description>
+        </field>
+        <field name="method" type="text-short">
+            <description>HTTP method: GET, POST, PUT, PATCH, DELETE</description>
+        </field>
+        <field name="path" type="text-medium">
+            <description>Request path (e.g. /rest/s1/mantle/orders/100001)</description>
+        </field>
+        <field name="statusCode" type="number-integer">
+            <description>HTTP response status code</description>
+        </field>
+        <field name="sourceIp" type="text-short"/>
+        <field name="userAgent" type="text-medium"/>
+        <field name="requestBody" type="text-very-long">
+            <description>Request body (may be truncated)</description>
+        </field>
+        <field name="durationMs" type="number-integer">
+            <description>Processing time in milliseconds</description>
+        </field>
+        <field name="createdDate" type="date-time" default="ec.user.nowTimestamp"/>
+        <relationship type="one" related="moqui.security.UserAccount"/>
+        <relationship type="one-nofk" related="headless.auth.ApiKey"/>
+        <index name="APIAUDIT_DATE"><index-field name="createdDate"/></index>
+        <index name="APIAUDIT_USER"><index-field name="userId"/></index>
+        <index name="APIAUDIT_PATH"><index-field name="path"/></index>
+    </entity>
+
+    <!-- ========================================================= -->
+    <!-- headless.rate — Rate Limiting Configuration                -->
+    <!-- ========================================================= -->
+
+    <entity entity-name="RateLimitConfig" package="headless.rate" cache="true"
+            short-alias="rateLimits">
+        <description>
+            Per-key or per-path rate limiting configuration.
+            Enforced in the webhook or API gateway layer.
+        </description>
+        <field name="rateLimitId" type="id" is-pk="true"/>
+        <field name="name" type="text-medium"/>
+        <field name="apiKeyId" type="id">
+            <description>Null = global limit; set = per-key limit</description>
+        </field>
+        <field name="pathPattern" type="text-medium">
+            <description>Optional regex to match request paths; null = all paths</description>
+        </field>
+        <field name="maxRequests" type="number-integer">
+            <description>Maximum requests allowed in the window</description>
+        </field>
+        <field name="windowSeconds" type="number-integer">
+            <description>Sliding window in seconds</description>
+        </field>
+        <field name="disabled" type="text-indicator"/>
+        <relationship type="one-nofk" related="headless.auth.ApiKey"/>
+    </entity>
+
+    <!-- ========================================================= -->
+    <!-- View Entities                                              -->
+    <!-- ========================================================= -->
+
+    <view-entity entity-name="ApiKeyDetail" package="headless.auth">
+        <description>ApiKey with user account info</description>
+        <member-entity entity-alias="AK" entity-name="headless.auth.ApiKey"/>
+        <member-entity entity-alias="UA" entity-name="moqui.security.UserAccount" join-from-alias="AK">
+            <key-map field-name="userId"/>
+        </member-entity>
+        <alias-all entity-alias="AK"/>
+        <alias entity-alias="UA" name="username" field="username"/>
+        <alias entity-alias="UA" name="userFullName" field="userFullName"/>
+    </view-entity>
+
+    <view-entity entity-name="WebhookDeliveryDetail" package="headless.webhook">
+        <description>Webhook delivery with endpoint name</description>
+        <member-entity entity-alias="WD" entity-name="headless.webhook.WebhookDelivery"/>
+        <member-relationship entity-alias="WE" join-from-alias="WD" relationship="webhook"/>
+        <alias-all entity-alias="WD"/>
+        <alias entity-alias="WE" name="webhookName" field="name"/>
+        <alias entity-alias="WE" name="targetUrl" field="targetUrl"/>
+    </view-entity>
+
+</entities>

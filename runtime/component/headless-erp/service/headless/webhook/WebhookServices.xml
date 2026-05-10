@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<services xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/service-definition-3.xsd">
+
+    <!-- ========================================================= -->
+    <!-- Webhook Endpoint CRUD                                      -->
+    <!-- ========================================================= -->
+
+    <service verb="register" noun="Webhook">
+        <description>Register a new webhook endpoint.</description>
+        <in-parameters>
+            <parameter name="name" required="true"/>
+            <parameter name="description"/>
+            <parameter name="targetUrl" required="true"/>
+            <parameter name="subscribedEvents" required="true"/>
+            <parameter name="secret"/>
+            <parameter name="contentType" default-value="application/json"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="webhookId" required="true"/>
+            <parameter name="secret" required="true"/>
+        </out-parameters>
+        <actions>
+            <!-- Auto-generate secret if not provided -->
+            <if condition="!secret">
+                <set field="randomBytes" from="new byte[32]"/>
+                <script>new java.security.SecureRandom().nextBytes(context.get('randomBytes'))</script>
+                <set field="secret" from="org.apache.commons.codec.binary.Base64.encodeBase64URLSafeString(context.get('randomBytes'))"/>
+            </if>
+
+            <set field="newWebhook" from="ec.entity.makeValue('headless.webhook.WebhookEndpoint')"/>
+            <set field="newWebhook.name" from="name"/>
+            <set field="newWebhook.description" from="description"/>
+            <set field="newWebhook.targetUrl" from="targetUrl"/>
+            <set field="newWebhook.secret" from="secret"/>
+            <set field="newWebhook.subscribedEvents" from="subscribedEvents"/>
+            <set field="newWebhook.active" value="Y"/>
+            <set field="newWebhook.contentType" from="contentType"/>
+            <set field="newWebhook.createdByUserId" from="ec.user.userId"/>
+            <set field="newWebhook.disabled" value="N"/>
+            <entity-sequenced-id-primary value-field="newWebhook"/>
+            <entity-create value-field="newWebhook"/>
+            <set field="webhookId" from="newWebhook.webhookId"/>
+        </actions>
+    </service>
+
+    <service verb="update" noun="Webhook">
+        <description>Update an existing webhook endpoint.</description>
+        <in-parameters>
+            <parameter name="webhookId" required="true"/>
+            <parameter name="name"/>
+            <parameter name="description"/>
+            <parameter name="targetUrl"/>
+            <parameter name="subscribedEvents"/>
+            <parameter name="active"/>
+            <parameter name="contentType"/>
+            <parameter name="disabled"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="headless.webhook.WebhookEndpoint" value-field="webhook" for-update="true"/>
+            <if condition="webhook">
+                <if condition="name"><set field="webhook.name" from="name"/></if>
+                <if condition="description"><set field="webhook.description" from="description"/></if>
+                <if condition="targetUrl"><set field="webhook.targetUrl" from="targetUrl"/></if>
+                <if condition="subscribedEvents"><set field="webhook.subscribedEvents" from="subscribedEvents"/></if>
+                <if condition="active"><set field="webhook.active" from="active"/></if>
+                <if condition="contentType"><set field="webhook.contentType" from="contentType"/></if>
+                <if condition="disabled"><set field="webhook.disabled" from="disabled"/></if>
+                <entity-update value-field="webhook"/>
+            </if>
+        </actions>
+    </service>
+
+    <!-- ========================================================= -->
+    <!-- Webhook Event Firing                                       -->
+    <!-- ========================================================= -->
+
+    <service verb="fire" noun="WebhookEvent" multi="true" retry="true">
+        <description>
+            Fire a webhook event to all matching endpoints.
+            This service is meant to be called async (queued) from other services.
+        </description>
+        <in-parameters>
+            <parameter name="eventName" required="true"/>
+            <parameter name="payload" type="Map" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="headless.webhook.WebhookEndpoint" list="webhooks">
+                <econdition field-name="active" value="Y"/>
+                <econdition field-name="disabled" operator="not-equals" value="Y"/>
+                <econdition field-name="subscribedEvents" operator="like" from="'%' + eventName + '%'"/>
+            </entity-find>
+            <iterate list="webhooks" entry="webhook">
+                <service-call name="headless.webhook.WebhookServices.deliver#Webhook"
+                        in-map="[webhookId:webhook.webhookId, eventName:eventName, payload:payload]"
+                        async="true"/>
+            </iterate>
+        </actions>
+    </service>
+
+    <service verb="deliver" noun="Webhook" retry="true">
+        <description>
+            Deliver a single webhook payload to a single endpoint.
+            Records the result in WebhookDelivery.
+        </description>
+        <in-parameters>
+            <parameter name="webhookId" required="true"/>
+            <parameter name="eventName" required="true"/>
+            <parameter name="payload" type="Map" required="true"/>
+        </in-parameters>
+        <actions>
+            <entity-find-one entity-name="headless.webhook.WebhookEndpoint" value-field="webhook"/>
+            <if condition="!webhook || webhook.disabled == 'Y' || webhook.active != 'Y'">
+                <return message="Webhook ${webhookId} not found or inactive"/></if>
+
+            <!-- Build JSON payload with metadata -->
+            <set field="jsonBody" from="groovy.json.JsonOutput.toJson([event:eventName, timestamp:ec.user.nowTimestamp.toString(), data:payload])"/>
+
+            <!-- Create delivery record -->
+            <set field="newDelivery" from="ec.entity.makeValue('headless.webhook.WebhookDelivery')"/>
+            <set field="newDelivery.webhookId" from="webhookId"/>
+            <set field="newDelivery.eventName" from="eventName"/>
+            <set field="newDelivery.payload" from="jsonBody"/>
+            <set field="newDelivery.statusEnumId" value="WdsPending"/>
+            <set field="newDelivery.attemptCount" from="1"/>
+            <entity-sequenced-id-primary value-field="newDelivery"/>
+            <entity-create value-field="newDelivery"/>
+            <set field="deliveryId" from="newDelivery.deliveryId"/>
+
+            <!-- Deliver via HTTP POST -->
+            <script><![CDATA[
+                import javax.net.ssl.HttpsURLConnection
+
+                long startMs = System.currentTimeMillis()
+                int httpStatus = 0
+                String responseBody = ''
+                try {
+                    def url = new URL(webhook.targetUrl)
+                    def conn = (HttpURLConnection) url.openConnection()
+                    conn.setRequestMethod('POST')
+                    conn.setRequestProperty('Content-Type', webhook.contentType ?: 'application/json')
+                    if (webhook.secret) {
+                        def mac = javax.crypto.Mac.getInstance('HmacSHA256')
+                        mac.init(new javax.crypto.spec.SecretKeySpec(webhook.secret.getBytes('UTF-8'), 'HmacSHA256'))
+                        def sig = mac.doFinal(jsonBody.getBytes('UTF-8')).collect { String.format('%02x', it) }.join()
+                        conn.setRequestProperty('X-Webhook-Signature', 'sha256=' + sig)
+                    }
+                    conn.setRequestProperty('X-Webhook-Event', eventName)
+                    conn.setRequestProperty('X-Webhook-Delivery', deliveryId)
+                    conn.setDoOutput(true)
+                    conn.setConnectTimeout(10000)
+                    conn.setReadTimeout(30000)
+
+                    def os = conn.getOutputStream()
+                    os.write(jsonBody.getBytes('UTF-8'))
+                    os.close()
+
+                    httpStatus = conn.getResponseCode()
+                    long durationMs = System.currentTimeMillis() - startMs
+
+                    if (httpStatus >= 200 && httpStatus < 300) {
+                        def is = conn.getInputStream()
+                        responseBody = is.getText('UTF-8').take(10240)
+                        is.close()
+                        def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).one()
+                        if (upd) {
+                            upd.statusCode = httpStatus
+                            upd.responseBody = responseBody
+                            upd.statusEnumId = 'WdsDelivered'
+                            upd.deliveredDate = ec.user.nowTimestamp
+                            upd.durationMs = durationMs
+                            upd.update()
+                        }
+                    } else {
+                        def es = conn.getErrorStream()
+                        if (es) responseBody = es.getText('UTF-8').take(10240)
+                        def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).one()
+                        if (upd) {
+                            upd.statusCode = httpStatus
+                            upd.responseBody = responseBody
+                            upd.statusEnumId = 'WdsFailed'
+                            upd.durationMs = durationMs
+                            upd.update()
+                        }
+                    }
+                } catch (Exception e) {
+                    long durationMs = System.currentTimeMillis() - startMs
+                    def upd = ec.entity.find('headless.webhook.WebhookDelivery').condition('deliveryId', deliveryId).one()
+                    if (upd) {
+                        upd.statusCode = httpStatus
+                        upd.responseBody = e.message?.take(10240) ?: 'Unknown error'
+                        upd.statusEnumId = 'WdsFailed'
+                        upd.durationMs = durationMs
+                        upd.update()
+                    }
+                }
+            ]]></script>
+        </actions>
+    </service>
+
+    <service verb="retry" noun="FailedWebhooks">
+        <description>
+            Retry all webhook deliveries that are in Failed status
+            and have not exceeded the max retry count.
+        </description>
+        <in-parameters>
+            <parameter name="maxRetries" type="Integer" default-value="5"/>
+        </in-parameters>
+        <actions>
+            <entity-find entity-name="headless.webhook.WebhookDelivery" list="failed">
+                <econdition field-name="statusEnumId" value="WdsFailed"/>
+                <econdition field-name="attemptCount" operator="less-equals" from="maxRetries"/>
+                <order-by field-name="createdDate"/>
+            </entity-find>
+            <iterate list="failed" entry="delivery">
+                <set field="delivery.attemptCount" from="delivery.attemptCount + 1"/>
+                <set field="delivery.statusEnumId" value="WdsPending"/>
+                <entity-update value-field="delivery"/>
+                <set field="parsedPayload" from="new groovy.json.JsonSlurper().parseText(delivery.payload as String) as Map"/>
+                <service-call name="headless.webhook.WebhookServices.deliver#Webhook"
+                        in-map="[webhookId:delivery.webhookId, eventName:delivery.eventName, payload:parsedPayload]"
+                        async="true"/>
+            </iterate>
+        </actions>
+    </service>
+
+</services>

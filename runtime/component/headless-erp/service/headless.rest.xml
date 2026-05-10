@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Headless ERP — REST API
+
+Mount point: /rest/s1/headless/
+
+General Guideline Verbs: GET=find, POST=create/do, PUT=store (create or update),
+PATCH=update, DELETE=delete
+
+Authentication: HTTP Basic (username:password) or Bearer token (API key raw value)
+-->
+<resource xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/rest-api-3.xsd"
+        name="headless" displayName="Headless ERP API" version="1.0.0"
+        description="Headless ERP extensions: API key management, webhooks, audit, stats, and health.">
+
+    <!-- ========== Health (no auth required for load balancers) ========== -->
+    <resource name="health" description="System health check">
+        <method type="get"><service name="headless.report.ReportServices.get#HealthStatus"/></method>
+    </resource>
+
+    <!-- ========== API Keys ========== -->
+    <resource name="apiKeys" description="Manage API keys for machine-to-machine authentication">
+        <method type="get"><entity name="headless.auth.ApiKeyDetail" operation="list"/></method>
+
+        <id name="apiKeyId">
+            <method type="get"><entity name="headless.auth.ApiKeyDetail" operation="one"/></method>
+            <method type="delete"><service name="headless.auth.AuthServices.revoke#ApiKey"/></method>
+
+            <resource name="rotate"><method type="post">
+                <service name="headless.auth.AuthServices.rotate#ApiKey"/></method></resource>
+        </id>
+
+        <resource name="create"><method type="post">
+            <service name="headless.auth.AuthServices.create#ApiKey"/></method></resource>
+        <resource name="validate"><method type="post">
+            <service name="headless.auth.AuthServices.validate#ApiKey"/></method></resource>
+    </resource>
+
+    <!-- ========== Webhooks ========== -->
+    <resource name="webhooks" description="Manage outbound webhook endpoints">
+        <method type="get"><entity name="webhooks" operation="list"/></method>
+        <method type="post"><service name="headless.webhook.WebhookServices.register#Webhook"/></method>
+
+        <id name="webhookId">
+            <method type="get"><entity name="webhooks" operation="one"/></method>
+            <method type="patch"><service name="headless.webhook.WebhookServices.update#Webhook"/></method>
+
+            <resource name="deliveries" description="Delivery history for this webhook">
+                <method type="get"><entity name="headless.webhook.WebhookDeliveryDetail" operation="list"/></method>
+
+                <id name="deliveryId">
+                    <method type="get"><entity name="headless.webhook.WebhookDeliveryDetail" operation="one"/></method>
+                </id>
+            </resource>
+        </id>
+
+        <resource name="retryFailed"><method type="post">
+            <service name="headless.webhook.WebhookServices.retry#FailedWebhooks"/></method></resource>
+    </resource>
+
+    <!-- ========== Audit Log ========== -->
+    <resource name="audit" description="API audit trail">
+        <method type="get"><entity name="headless.audit.ApiAuditLog" operation="list"/></method>
+
+        <id name="auditId">
+            <method type="get"><entity name="headless.audit.ApiAuditLog" operation="one"/></method>
+        </id>
+    </resource>
+
+    <!-- ========== Dashboard & Stats ========== -->
+    <resource name="stats" description="Aggregate dashboard statistics">
+        <method type="get"><service name="headless.report.ReportServices.get#DashboardStats"/></method>
+    </resource>
+
+    <resource name="activity" description="Recent activity feed">
+        <method type="get"><service name="headless.report.ReportServices.get#RecentActivity"/></method>
+    </resource>
+
+    <!-- ========== Rate Limits ========== -->
+    <resource name="rateLimits" description="Rate limit configuration">
+        <method type="get"><entity name="headless.rate.RateLimitConfig" operation="list"/></method>
+        <method type="post"><entity name="headless.rate.RateLimitConfig" operation="create"/></method>
+
+        <id name="rateLimitId">
+            <method type="get"><entity name="headless.rate.RateLimitConfig" operation="one"/></method>
+            <method type="patch"><entity name="headless.rate.RateLimitConfig" operation="update"/></method>
+            <method type="delete"><entity name="headless.rate.RateLimitConfig" operation="delete"/></method>
+        </id>
+    </resource>
+
+</resource>
