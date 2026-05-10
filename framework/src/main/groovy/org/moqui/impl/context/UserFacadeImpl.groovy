@@ -161,6 +161,13 @@ class UserFacadeImpl implements UserFacade {
                 logger.warn("For HTTP Basic Authorization got bad credentials string. Base64 encoded is [${basicAuthEncoded}] and after decoding is [${basicAuthAsString}].")
             }
         }
+        // Headless ERP: Authorization: Bearer hlp_... (API key authentication)
+        if (currentInfo.username == null && authzHeader != null && authzHeader.length() > 7 && authzHeader.startsWith("Bearer ")) {
+            String bearerToken = authzHeader.substring(7).trim()
+            if (bearerToken.startsWith("hlp_")) {
+                this.loginApiKey(bearerToken)
+            }
+        }
         if (currentInfo.username == null && (request.getHeader("api_key") || request.getHeader("login_key"))) {
             String loginKey = request.getHeader("api_key") ?: request.getHeader("login_key")
             loginKey = loginKey.trim()
@@ -298,6 +305,13 @@ class UserFacadeImpl implements UserFacade {
                 this.loginUser(username, password)
             } else {
                 logger.warn("For HTTP Basic Authorization got bad credentials string. Base64 encoded is [${basicAuthEncoded}] and after decoding is [${basicAuthAsString}].")
+            }
+        }
+        // Headless ERP: Authorization: Bearer hlp_... (API key authentication)
+        if (currentInfo.username == null && authzHeader != null && authzHeader.length() > 7 && authzHeader.substring(0, 7).equals("Bearer ")) {
+            String bearerToken = authzHeader.substring(7).trim()
+            if (bearerToken.startsWith("hlp_")) {
+                this.loginApiKey(bearerToken)
             }
         }
         if (currentInfo.username == null && (headers.api_key || headers.login_key)) {
@@ -783,6 +797,63 @@ class UserFacadeImpl implements UserFacade {
                 .condition("userId", userLoginKey.userId).disableAuthz().one()
         return internalLoginUser(userAccount.getString("username"))
     }
+
+    /** Headless ERP: Authenticate via API key (Authorization: Bearer hlp_...) */
+    boolean loginApiKey(String rawKey) {
+        if (!rawKey) {
+            eci.message.addError(eci.l10n.localize("No API key specified"))
+            return false
+        }
+
+        // SHA-256 hash the raw key to look it up
+        String keyHash = org.apache.commons.codec.digest.DigestUtils.sha256Hex(rawKey)
+
+        // Find active, non-expired API key by hash
+        EntityList apiKeyList = eci.getEntity().find("headless.auth.ApiKey")
+                .condition("keyHash", keyHash)
+                .condition("disabled", "N")
+                .disableAuthz().list()
+        // filter by date in Groovy to avoid DB-specific date issues
+        Timestamp nowDate = getNowTimestamp()
+        EntityValue apiKey = null
+        for (EntityValue candidate in apiKeyList) {
+            Timestamp fromDate = candidate.getTimestamp("fromDate")
+            Timestamp thruDate = candidate.getTimestamp("thruDate")
+            if (fromDate != null && nowDate < fromDate) continue
+            if (thruDate != null && nowDate > thruDate) continue
+            apiKey = candidate
+            break
+        }
+
+        if (apiKey == null) {
+            eci.message.addError(eci.l10n.localize("Invalid API key"))
+            return false
+        }
+
+        // Touch lastUsedDate
+        try {
+            EntityValue keyToUpdate = eci.getEntity().find("headless.auth.ApiKey")
+                    .condition("apiKeyId", apiKey.apiKeyId).disableAuthz().one()
+            if (keyToUpdate != null) {
+                keyToUpdate.set("lastUsedDate", nowDate)
+                keyToUpdate.update()
+            }
+        } catch (Exception e) {
+            logger.warn("Error updating API key lastUsedDate: " + e.message)
+        }
+
+        // Login the associated user
+        EntityValue userAccount = eci.getEntity().find("moqui.security.UserAccount")
+                .condition("userId", apiKey.userId).disableAuthz().one()
+        if (userAccount == null) {
+            eci.message.addError(eci.l10n.localize("API key user not found"))
+            return false
+        }
+
+        if (logger.infoEnabled) logger.info("API key login for user ${userAccount.username} via key ${apiKey.keyPrefix}...")
+        return internalLoginUser(userAccount.getString("username"))
+    }
+
     @Override String getLoginKey() {
         return getLoginKey(eci.ecfi.getLoginKeyExpireHours())
     }

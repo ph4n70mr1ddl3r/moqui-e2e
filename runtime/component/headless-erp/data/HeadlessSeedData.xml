@@ -18,7 +18,7 @@
     <!-- Mantle REST API paths: read + write -->
     <moqui.security.ArtifactGroup artifactGroupId="MANTLE_REST_RW" description="Mantle REST API read/write"/>
     <moqui.security.ArtifactGroupMember artifactGroupId="MANTLE_REST_RW"
-            artifactName="/rest/s1/mantle/.*" nameIsPattern="Y"
+            artifactName="/mantle.*" nameIsPattern="Y"
             artifactTypeEnumId="AT_REST_PATH" inheritAuthz="Y"/>
     <moqui.security.ArtifactAuthz artifactAuthzId="MANTLE_REST_RW_API_USER"
             userGroupId="API_USER" artifactGroupId="MANTLE_REST_RW"
@@ -27,7 +27,7 @@
     <!-- Headless REST API paths: full access -->
     <moqui.security.ArtifactGroup artifactGroupId="HEADLESS_REST" description="Headless ERP REST API"/>
     <moqui.security.ArtifactGroupMember artifactGroupId="HEADLESS_REST"
-            artifactName="/rest/s1/headless/.*" nameIsPattern="Y"
+            artifactName="/headless.*" nameIsPattern="Y"
             artifactTypeEnumId="AT_REST_PATH" inheritAuthz="Y"/>
     <moqui.security.ArtifactAuthz artifactAuthzId="HEADLESS_REST_API_USER"
             userGroupId="API_USER" artifactGroupId="HEADLESS_REST"
