@@ -29,6 +29,8 @@
                     jdbc-password="${entity_ds_password}"
                     pool-max="50" pool-min="10"/>
         </datasource>
+        <!-- Auto-load admin user on fresh DB -->
+        <data-file location="runtime/conf/AdminUserData.xml" type="install"/>
     </entity-facade>
 
     <server-stats stats-skip-condition="pathInfo?.startsWith('/rpc') || pathInfo?.startsWith('/rest') || pathInfo?.startsWith('/status')"

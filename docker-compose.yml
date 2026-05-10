@@ -1,0 +1,67 @@
+# Headless ERP — full stack
+#
+# Usage:
+#   docker compose up          # start the stack
+#   docker compose up -d       # start in background
+#   docker compose logs -f app # tail app logs
+#   docker compose down        # stop and remove containers
+#
+# First run will auto-create tables and load seed data.
+# To reset:  docker compose down -v   (deletes the database volume)
+#
+# Environment overrides:
+#   ENTITY_DS_DB_PASSWORD   — PostgreSQL password
+#   ENTITY_DS_CRYPT_PASS    — Moqui entity encryption key
+#   JAVA_OPTS               — JVM flags (default: -Xms512m -Xmx1024m)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: headless_erp
+      POSTGRES_USER: headless_erp
+      POSTGRES_PASSWORD: headless_erp
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U headless_erp -d headless_erp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENTITY_DS_DB_HOST: postgres
+      ENTITY_DS_DB_PORT: 5432
+      ENTITY_DS_DB_NAME: headless_erp
+      ENTITY_DS_DB_USER: headless_erp
+      ENTITY_DS_DB_PASSWORD: headless_erp
+      ENTITY_DS_CRYPT_PASS: MoquiHeadlessERP
+      JAVA_OPTS: "-server -Xms512m -Xmx1024m -XX:+UseG1GC"
+    ports:
+      - "8080:8080"
+    volumes:
+      - applogs:/opt/moqui/runtime/log
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/rest/s1/headless/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 5
+
+volumes:
+  pgdata:
+    driver: local
+  applogs:
+    driver: local

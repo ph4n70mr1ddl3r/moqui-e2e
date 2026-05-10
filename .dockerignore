@@ -1,0 +1,42 @@
+# Build artifacts
+.gradle/
+build/
+**/build/
+execwartmp/
+moqui.war
+moqui-plus-runtime.war
+wartemp/
+
+# Runtime state (created fresh in container)
+runtime/db/
+runtime/log/
+runtime/logs/
+runtime/sessions/
+runtime/txlog/
+runtime/classes/
+runtime/script-classes/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Misc
+*.swp
+*.swo
+*~
+Save*.zip
+reset.sh

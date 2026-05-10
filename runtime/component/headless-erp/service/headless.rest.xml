@@ -16,7 +16,7 @@ Authentication: HTTP Basic (username:password) or Bearer token (API key raw valu
 
     <!-- ========== Health (no auth required for load balancers) ========== -->
     <resource name="health" description="System health check">
-        <method type="get"><service name="headless.report.ReportServices.get#HealthStatus"/></method>
+        <method type="get" require-authentication="anonymous-all"><service name="headless.report.ReportServices.get#HealthStatus"/></method>
     </resource>
 
     <!-- ========== API Keys ========== -->
