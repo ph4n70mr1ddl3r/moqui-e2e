@@ -27,6 +27,18 @@ dependencies {
 
 check.dependsOn.clear()
 
+// Task to regenerate the OpenAPI spec from REST XML definitions
+task generateOpenApi(type: Exec) {
+    description = 'Generate OpenAPI 3.0 spec from REST XML definitions'
+    group = 'documentation'
+    workingDir = moquiDir
+    commandLine 'python3', 'tools/generate-openapi.py', '--output', 'openapi.yaml'
+    inputs.file file(moquiDir.absolutePath + '/runtime/component/headless-erp/service/headless.rest.xml')
+    inputs.file file(moquiDir.absolutePath + '/runtime/component/mantle-usl/service/mantle.rest.xml')
+    inputs.file file(moquiDir.absolutePath + '/tools/generate-openapi.py')
+    outputs.file file(moquiDir.absolutePath + '/openapi.yaml')
+}
+
 test {
     useJUnitPlatform()
     testLogging { events "passed", "skipped", "failed" }
