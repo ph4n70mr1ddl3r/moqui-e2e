@@ -27,6 +27,12 @@ along with this software (see the LICENSE.md file). If not, see
         <artifacts artifactTypeEnumId="AT_REST_PATH" artifactName="/mantle/my" inheritAuthz="Y"/>
         <authz artifactAuthzId="MANTLE_MY_API_ALL" userGroupId="ALL_USERS" authzTypeEnumId="AUTHZT_ALLOW" authzActionEnumId="AUTHZA_ALL"/>
     </artifactGroups>
+    <!-- Non-admin users can read/update their own party via /mantle/parties/{partyId} -->
+    <artifactGroups artifactGroupId="MANTLE_PARTY_SELF" description="Party self-service (own party only)">
+        <artifacts artifactTypeEnumId="AT_REST_PATH" artifactName="/mantle/parties/{partyId}" inheritAuthz="Y"/>
+        <authz artifactAuthzId="MANTLE_PARTY_SELF_ALL" userGroupId="ALL_USERS" authzTypeEnumId="AUTHZT_ALLOW" authzActionEnumId="AUTHZA_ALL"
+               authzServiceName="mantle.party.PartyServices.check#OwnPartyAuthz"/>
+    </artifactGroups>
 
     <!-- Special Permissions - NOTE: other such permissions that the data model seed data relies on are in MantleUdmSetupData.xml in mantle-udm -->
     <userPermissions userPermissionId="ORDER_APPROVE" description="Order Approve"/>

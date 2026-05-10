@@ -1253,4 +1253,33 @@ along with this software (see the LICENSE.md file). If not, see
             </iterate>
         </actions>
     </service>
+    <!-- Authorization service used by ArtifactAuthz to verify a non-admin user owns the party they are accessing.
+         Receives: userId, authzActionEnumId, artifactTypeEnumId, artifactName
+         Must return: authzTypeEnumId (AUTHZT_ALLOW or AUTHZT_DENY) -->
+    <service verb="check" noun="OwnPartyAuthz" type="script">
+        <description>Checks if the current user's partyId matches the partyId in the request path.
+            Returns AUTHZT_ALLOW if they match, AUTHZT_DENY otherwise.</description>
+        <in-parameters>
+            <parameter name="userId" required="true"/>
+            <parameter name="authzActionEnumId"/>
+            <parameter name="artifactTypeEnumId"/>
+            <parameter name="artifactName"/>
+        </in-parameters>
+        <out-parameters>
+            <parameter name="authzTypeEnumId" required="true"/>
+        </out-parameters>
+        <script><![CDATA[
+            import org.moqui.context.ArtifactExecutionInfo
+
+            // Get the partyId from the request context (set by IdNode in REST path parsing)
+            def requestPartyId = ec.context.partyId
+            def userPartyId = ec.user.userAccount?.partyId
+
+            if (requestPartyId && userPartyId && requestPartyId == userPartyId) {
+                authzTypeEnumId = ArtifactExecutionInfo.AUTHZT_ALLOW.name()
+            } else {
+                authzTypeEnumId = ArtifactExecutionInfo.AUTHZT_DENY.name()
+            }
+        ]]></script>
+    </service>
 </services>
