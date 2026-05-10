@@ -27,50 +27,60 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class InlineServiceRunner implements ServiceRunner {
-    protected static final Logger logger = LoggerFactory.getLogger(InlineServiceRunner.class);
-    private ExecutionContextFactoryImpl ecfi = null;
+	protected static final Logger logger = LoggerFactory.getLogger(InlineServiceRunner.class);
+	private ExecutionContextFactoryImpl ecfi = null;
 
-    public InlineServiceRunner() { }
+	public InlineServiceRunner() {
+	}
 
-    @Override
-    public ServiceRunner init(ServiceFacadeImpl sfi) {
-        ecfi = sfi.ecfi;
-        return this;
-    }
+	@Override
+	public ServiceRunner init(ServiceFacadeImpl sfi) {
+		ecfi = sfi.ecfi;
+		return this;
+	}
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> runService(ServiceDefinition sd, Map<String, Object> parameters) {
-        if (sd.xmlAction == null) throw new ServiceException("Service" + sd.serviceName + " run inline but has no actions");
-        ExecutionContextImpl ec = ecfi.getEci();
-        ContextStack cs = ec.contextStack;
+	@Override
+	@SuppressWarnings("unchecked")
+	public Map<String, Object> runService(ServiceDefinition sd, Map<String, Object> parameters) {
+		if (sd.xmlAction == null)
+			throw new ServiceException("Service" + sd.serviceName + " run inline but has no actions");
+		ExecutionContextImpl ec = ecfi.getEci();
+		ContextStack cs = ec.contextStack;
 
-        // push the entire context to isolate the context for the service call
-        cs.pushContext();
-        try {
-            // add the parameters to this service call; copy instead of pushing, faster with newer ContextStack
-            cs.putAll(parameters);
-            // we have an empty context so add the ec
-            cs.put("ec", ec);
-            // add a convenience Map to explicitly put results in
-            Map<String, Object> autoResult = new HashMap<>();
-            cs.put("result", autoResult);
+		// push the entire context to isolate the context for the service call
+		cs.pushContext();
+		try {
+			// add the parameters to this service call; copy instead of pushing, faster with
+			// newer ContextStack
+			cs.putAll(parameters);
+			// we have an empty context so add the ec
+			cs.put("ec", ec);
+			// add a convenience Map to explicitly put results in
+			Map<String, Object> autoResult = new HashMap<>();
+			cs.put("result", autoResult);
 
-            Object result = sd.xmlAction.run(ec);
+			Object result = sd.xmlAction.run(ec);
 
-            if (result instanceof Map) {
-                return (Map<String, Object>) result;
-            } else {
-                ScriptServiceRunner.combineResults(sd, autoResult, cs.getCombinedMap());
-                return autoResult;
-            }
-        /* ServiceCallSyncImpl logs this anyway, no point logging it here: } catch (Throwable t) { logger.error("Error running inline XML Actions in service [${sd.serviceName}]: ", t); throw t */
-        } finally {
-            // pop the entire context to get back to where we were before isolating the context with pushContext
-            cs.popContext();
-        }
-    }
+			if (result instanceof Map) {
+				return (Map<String, Object>) result;
+			} else {
+				ScriptServiceRunner.combineResults(sd, autoResult, cs.getCombinedMap());
+				return autoResult;
+			}
+			/*
+			 * ServiceCallSyncImpl logs this anyway, no point logging it here: } catch
+			 * (Throwable t) { logger.
+			 * error("Error running inline XML Actions in service [${sd.serviceName}]: ",
+			 * t); throw t
+			 */
+		} finally {
+			// pop the entire context to get back to where we were before isolating the
+			// context with pushContext
+			cs.popContext();
+		}
+	}
 
-    @Override
-    public void destroy() { }
+	@Override
+	public void destroy() {
+	}
 }

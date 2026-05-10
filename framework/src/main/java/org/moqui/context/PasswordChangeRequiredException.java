@@ -15,11 +15,21 @@ package org.moqui.context;
 
 import org.apache.shiro.authc.CredentialsException;
 
-/** Thrown when user's password is correct but account requires second factor authentication. */
+/**
+ * Thrown when user's password is correct but account requires second factor
+ * authentication.
+ */
 public class PasswordChangeRequiredException extends CredentialsException {
-    public PasswordChangeRequiredException() { super(); }
-    public PasswordChangeRequiredException(String str) { super(str); }
-    public PasswordChangeRequiredException(Throwable nested) { super(nested); }
-    public PasswordChangeRequiredException(String str, Throwable nested) { super(str, nested); }
+	public PasswordChangeRequiredException() {
+		super();
+	}
+	public PasswordChangeRequiredException(String str) {
+		super(str);
+	}
+	public PasswordChangeRequiredException(Throwable nested) {
+		super(nested);
+	}
+	public PasswordChangeRequiredException(String str, Throwable nested) {
+		super(str, nested);
+	}
 }
-

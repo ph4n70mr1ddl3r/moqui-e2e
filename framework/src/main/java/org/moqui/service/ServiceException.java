@@ -18,11 +18,11 @@ package org.moqui.service;
  */
 public class ServiceException extends org.moqui.BaseException {
 
-    public ServiceException(String str) {
-        super(str);
-    }
+	public ServiceException(String str) {
+		super(str);
+	}
 
-    public ServiceException(String str, Throwable nested) {
-        super(str, nested);
-    }
+	public ServiceException(String str, Throwable nested) {
+		super(str, nested);
+	}
 }

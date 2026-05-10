@@ -19,11 +19,11 @@ package org.moqui.entity;
  */
 public class EntityException extends org.moqui.BaseException {
 
-    public EntityException(String str) {
-        super(str);
-    }
+	public EntityException(String str) {
+		super(str);
+	}
 
-    public EntityException(String str, Throwable nested) {
-        super(str, nested);
-    }
+	public EntityException(String str, Throwable nested) {
+		super(str, nested);
+	}
 }

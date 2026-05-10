@@ -13,7 +13,10 @@
  */
 package org.moqui.util;
 
-/** A simple topic publish interface. Listeners (subscribers) should be handled directly on the topic implementation. */
+/**
+ * A simple topic publish interface. Listeners (subscribers) should be handled
+ * directly on the topic implementation.
+ */
 public interface SimpleTopic<E> {
-    void publish(E message);
+	void publish(E message);
 }

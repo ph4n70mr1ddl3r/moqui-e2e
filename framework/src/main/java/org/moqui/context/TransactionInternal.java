@@ -21,11 +21,11 @@ import jakarta.transaction.TransactionManager;
 import jakarta.transaction.UserTransaction;
 
 public interface TransactionInternal {
-    TransactionInternal init(ExecutionContextFactory ecf);
+	TransactionInternal init(ExecutionContextFactory ecf);
 
-    TransactionManager getTransactionManager();
-    UserTransaction getUserTransaction();
-    DataSource getDataSource(EntityFacade ef, MNode datasourceNode);
+	TransactionManager getTransactionManager();
+	UserTransaction getUserTransaction();
+	DataSource getDataSource(EntityFacade ef, MNode datasourceNode);
 
-    void destroy();
+	void destroy();
 }

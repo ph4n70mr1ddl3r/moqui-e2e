@@ -18,15 +18,18 @@ import javax.sql.DataSource;
 import java.util.List;
 
 public interface EntityDatasourceFactory {
-    EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode);
-    void destroy();
-    boolean checkTableExists(String entityName);
-    boolean checkAndAddTable(String entityName);
-    int checkAndAddAllTables();
-    EntityValue makeEntityValue(String entityName);
-    EntityFind makeEntityFind(String entityName);
-    void createBulk(List<EntityValue> valueList);
+	EntityDatasourceFactory init(EntityFacade ef, MNode datasourceNode);
+	void destroy();
+	boolean checkTableExists(String entityName);
+	boolean checkAndAddTable(String entityName);
+	int checkAndAddAllTables();
+	EntityValue makeEntityValue(String entityName);
+	EntityFind makeEntityFind(String entityName);
+	void createBulk(List<EntityValue> valueList);
 
-    /** Return the JDBC DataSource, if applicable. Return null if no JDBC DataSource exists for this Entity Datasource. */
-    DataSource getDataSource();
+	/**
+	 * Return the JDBC DataSource, if applicable. Return null if no JDBC DataSource
+	 * exists for this Entity Datasource.
+	 */
+	DataSource getDataSource();
 }

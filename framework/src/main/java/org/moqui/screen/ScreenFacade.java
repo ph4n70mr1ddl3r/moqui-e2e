@@ -13,11 +13,14 @@
  */
 package org.moqui.screen;
 
-/** For rendering screens for general use (mostly for things other than web pages or web page snippets). */
+/**
+ * For rendering screens for general use (mostly for things other than web pages
+ * or web page snippets).
+ */
 public interface ScreenFacade {
 
-    /** Make a ScreenRender object to render a screen. */
-    ScreenRender makeRender();
-    /** Make a ScreenTest object to test render one or more screens. */
-    ScreenTest makeTest();
+	/** Make a ScreenRender object to render a screen. */
+	ScreenRender makeRender();
+	/** Make a ScreenTest object to test render one or more screens. */
+	ScreenTest makeTest();
 }

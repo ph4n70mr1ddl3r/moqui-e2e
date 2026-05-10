@@ -19,14 +19,21 @@ import java.util.Deque;
 
 /** Thrown when artifact authz fails. */
 public class ArtifactAuthorizationException extends BaseArtifactException {
-    transient private ArtifactExecutionInfo artifactInfo = null;
+	transient private ArtifactExecutionInfo artifactInfo = null;
 
-    public ArtifactAuthorizationException(String str) { super(str); }
-    public ArtifactAuthorizationException(String str, Throwable nested) { super(str, nested); }
-    public ArtifactAuthorizationException(String str, ArtifactExecutionInfo curInfo, Deque<ArtifactExecutionInfo> curStack) {
-        super(str, curStack);
-        artifactInfo = curInfo;
-    }
+	public ArtifactAuthorizationException(String str) {
+		super(str);
+	}
+	public ArtifactAuthorizationException(String str, Throwable nested) {
+		super(str, nested);
+	}
+	public ArtifactAuthorizationException(String str, ArtifactExecutionInfo curInfo,
+			Deque<ArtifactExecutionInfo> curStack) {
+		super(str, curStack);
+		artifactInfo = curInfo;
+	}
 
-    public ArtifactExecutionInfo getArtifactInfo() { return artifactInfo; }
+	public ArtifactExecutionInfo getArtifactInfo() {
+		return artifactInfo;
+	}
 }

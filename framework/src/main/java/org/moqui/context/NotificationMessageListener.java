@@ -14,7 +14,7 @@
 package org.moqui.context;
 
 public interface NotificationMessageListener {
-    void init(ExecutionContextFactory ecf);
-    void destroy();
-    void onMessage(NotificationMessage nm);
+	void init(ExecutionContextFactory ecf);
+	void destroy();
+	void onMessage(NotificationMessage nm);
 }

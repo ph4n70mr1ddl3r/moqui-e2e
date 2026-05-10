@@ -301,7 +301,8 @@ class EntityDataDocument {
         // do the one big query
         String lastDocId = null
         int docCount = 0
-        try (EntityListIterator mainEli = mainFind.iterator()) {
+        EntityListIterator mainEli = mainFind.iterator()
+        try {
             logger.info("Feed dataDocumentId ${dataDocumentId} query complete (cursor opened) in ${System.currentTimeMillis() - startTimeMillis}ms")
             EntityValue ev
             while ((ev = (EntityValue) mainEli.next()) != null) {
@@ -344,6 +345,7 @@ class EntityDataDocument {
                 efi.ecfi.serviceFacade.sync().name(feedReceiveServiceName).parameter("documentList", documentMapList).call()
             }
         } finally {
+            if (mainEli != null) mainEli.close()
             logger.info("Feed dataDocumentId ${dataDocumentId} feed complete and cursor closed in ${System.currentTimeMillis() - startTimeMillis}ms")
         }
 

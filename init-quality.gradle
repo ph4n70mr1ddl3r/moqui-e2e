@@ -1,0 +1,18 @@
+allprojects {
+    plugins.withType(JavaPlugin) {
+        project.apply plugin: 'checkstyle'
+        project.checkstyle {
+            toolVersion = "10.12.0"
+            ignoreFailures = true
+            configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+        }
+    }
+    plugins.withType(GroovyPlugin) {
+        project.apply plugin: 'codenarc'
+        project.codenarc {
+            toolVersion = "3.3.0"
+            ignoreFailures = true
+            configFile = rootProject.file('config/codenarc/codenarc.xml')
+        }
+    }
+}

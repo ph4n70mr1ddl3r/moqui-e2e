@@ -16,7 +16,7 @@ package org.moqui.context;
 import org.moqui.BaseException;
 
 public interface ScriptRunner {
-    ScriptRunner init(ExecutionContextFactory ecf);
-    Object run(String location, String method, ExecutionContext ec) throws BaseException;
-    void destroy();
+	ScriptRunner init(ExecutionContextFactory ecf);
+	Object run(String location, String method, ExecutionContext ec) throws BaseException;
+	void destroy();
 }

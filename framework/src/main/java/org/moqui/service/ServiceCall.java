@@ -16,8 +16,11 @@ package org.moqui.service;
 import java.util.Map;
 
 public interface ServiceCall {
-    String getServiceName();
+	String getServiceName();
 
-    /** Map of name, value pairs that make up the context (in parameters) passed to the service. */
-    Map<String, Object> getCurrentParameters();
+	/**
+	 * Map of name, value pairs that make up the context (in parameters) passed to
+	 * the service.
+	 */
+	Map<String, Object> getCurrentParameters();
 }

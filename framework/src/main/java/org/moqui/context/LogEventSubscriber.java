@@ -15,8 +15,11 @@ package org.moqui.context;
 
 import org.apache.logging.log4j.core.LogEvent;
 
-/** A simple interface for a method to receive LogEvent instances.
- * To use implement this interface and call ExecutionContextFactory.registerLogEventSubscriber(). */
+/**
+ * A simple interface for a method to receive LogEvent instances. To use
+ * implement this interface and call
+ * ExecutionContextFactory.registerLogEventSubscriber().
+ */
 public interface LogEventSubscriber {
-    void process(LogEvent event);
+	void process(LogEvent event);
 }

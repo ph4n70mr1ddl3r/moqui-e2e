@@ -1,0 +1,20 @@
+initscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'org.owasp:dependency-check-gradle:10.0.4'
+    }
+}
+
+allprojects {
+    if (!project.plugins.hasPlugin("org.owasp.dependencycheck")) {
+        project.apply plugin: "org.owasp.dependencycheck"
+    }
+    dependencyCheck {
+        formats = ['HTML']
+        failBuildOnCVSS = 8.0 // Let's not fail initially, or maybe fail on high? Actually just generate report.
+        failOnError = false
+    }
+}

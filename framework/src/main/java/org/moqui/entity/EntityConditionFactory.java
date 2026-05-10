@@ -20,37 +20,47 @@ import java.util.Map;
 /**
  * Represents the conditions to be used to constrain a query.
  *
- * These can be used in various combinations using the different condition types.
+ * These can be used in various combinations using the different condition
+ * types.
  *
  */
 @SuppressWarnings("unused")
 public interface EntityConditionFactory {
 
-    EntityCondition getTrueCondition();
+	EntityCondition getTrueCondition();
 
-    EntityCondition makeCondition(EntityCondition lhs, EntityCondition.JoinOperator operator, EntityCondition rhs);
+	EntityCondition makeCondition(EntityCondition lhs, EntityCondition.JoinOperator operator, EntityCondition rhs);
 
-    EntityCondition makeCondition(String fieldName, EntityCondition.ComparisonOperator operator, Object value);
-    EntityCondition makeCondition(String fieldName, EntityCondition.ComparisonOperator operator, Object value, boolean orNull);
+	EntityCondition makeCondition(String fieldName, EntityCondition.ComparisonOperator operator, Object value);
+	EntityCondition makeCondition(String fieldName, EntityCondition.ComparisonOperator operator, Object value,
+			boolean orNull);
 
-    EntityCondition makeConditionToField(String fieldName, EntityCondition.ComparisonOperator operator, String toFieldName);
+	EntityCondition makeConditionToField(String fieldName, EntityCondition.ComparisonOperator operator,
+			String toFieldName);
 
-    /** Default to JoinOperator of AND */
-    EntityCondition makeCondition(List<EntityCondition> conditionList);
-    EntityCondition makeCondition(List<EntityCondition> conditionList, EntityCondition.JoinOperator operator);
+	/** Default to JoinOperator of AND */
+	EntityCondition makeCondition(List<EntityCondition> conditionList);
+	EntityCondition makeCondition(List<EntityCondition> conditionList, EntityCondition.JoinOperator operator);
 
-    /** More convenient for scripts, etc. The conditionList parameter may contain Map or EntityCondition objects. */
-    EntityCondition makeCondition(List<Object> conditionList, String listOperator, String mapComparisonOperator, String mapJoinOperator);
+	/**
+	 * More convenient for scripts, etc. The conditionList parameter may contain Map
+	 * or EntityCondition objects.
+	 */
+	EntityCondition makeCondition(List<Object> conditionList, String listOperator, String mapComparisonOperator,
+			String mapJoinOperator);
 
-    EntityCondition makeCondition(Map<String, Object> fieldMap, EntityCondition.ComparisonOperator comparisonOperator, EntityCondition.JoinOperator joinOperator);
+	EntityCondition makeCondition(Map<String, Object> fieldMap, EntityCondition.ComparisonOperator comparisonOperator,
+			EntityCondition.JoinOperator joinOperator);
 
-    /** Default to ComparisonOperator of EQUALS and JoinOperator of AND */
-    EntityCondition makeCondition(Map<String, Object> fieldMap);
+	/** Default to ComparisonOperator of EQUALS and JoinOperator of AND */
+	EntityCondition makeCondition(Map<String, Object> fieldMap);
 
-    EntityCondition makeConditionDate(String fromFieldName, String thruFieldName, Timestamp compareStamp);
+	EntityCondition makeConditionDate(String fromFieldName, String thruFieldName, Timestamp compareStamp);
 
-    EntityCondition makeConditionWhere(String sqlWhereClause);
+	EntityCondition makeConditionWhere(String sqlWhereClause);
 
-    /** Get a ComparisonOperator using an enumId for enum type "ComparisonOperator" */
-    EntityCondition.ComparisonOperator comparisonOperatorFromEnumId(String enumId);
+	/**
+	 * Get a ComparisonOperator using an enumId for enum type "ComparisonOperator"
+	 */
+	EntityCondition.ComparisonOperator comparisonOperatorFromEnumId(String enumId);
 }

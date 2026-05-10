@@ -14,8 +14,9 @@
 package org.moqui.entity;
 
 public class EntityValueNotFoundException extends EntityException {
-    public EntityValueNotFoundException(String str) {
-        super(str);
-    }
-    // public EntityValueNotFoundException(String str, Throwable nested) { super(str, nested); }
+	public EntityValueNotFoundException(String str) {
+		super(str);
+	}
+	// public EntityValueNotFoundException(String str, Throwable nested) {
+	// super(str, nested); }
 }

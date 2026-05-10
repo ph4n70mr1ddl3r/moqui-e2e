@@ -23,34 +23,43 @@ import javax.cache.CacheManager;
 
 /** A factory for getting a MCacheManager */
 public class MCacheToolFactory implements ToolFactory<CacheManager> {
-    protected final static Logger logger = LoggerFactory.getLogger(MCacheToolFactory.class);
-    public final static String TOOL_NAME = "MCache";
+	protected final static Logger logger = LoggerFactory.getLogger(MCacheToolFactory.class);
+	public final static String TOOL_NAME = "MCache";
 
-    protected ExecutionContextFactory ecf = null;
+	protected ExecutionContextFactory ecf = null;
 
-    private MCacheManager cacheManager = null;
+	private MCacheManager cacheManager = null;
 
-    /** Default empty constructor */
-    public MCacheToolFactory() { }
+	/** Default empty constructor */
+	public MCacheToolFactory() {
+	}
 
-    @Override
-    public String getName() { return TOOL_NAME; }
-    @Override
-    public void init(ExecutionContextFactory ecf) { }
-    @Override
-    public void preFacadeInit(ExecutionContextFactory ecf) {
-        this.ecf = ecf;
-        cacheManager = MCacheManager.getMCacheManager();
-    }
+	@Override
+	public String getName() {
+		return TOOL_NAME;
+	}
+	@Override
+	public void init(ExecutionContextFactory ecf) {
+	}
+	@Override
+	public void preFacadeInit(ExecutionContextFactory ecf) {
+		this.ecf = ecf;
+		cacheManager = MCacheManager.getMCacheManager();
+	}
 
-    @Override
-    public CacheManager getInstance(Object... parameters) {
-        if (cacheManager == null) throw new IllegalStateException("MCacheToolFactory not initialized");
-        return cacheManager;
-    }
+	@Override
+	public CacheManager getInstance(Object... parameters) {
+		if (cacheManager == null)
+			throw new IllegalStateException("MCacheToolFactory not initialized");
+		return cacheManager;
+	}
 
-    @Override
-    public void destroy() { cacheManager.close(); }
+	@Override
+	public void destroy() {
+		cacheManager.close();
+	}
 
-    ExecutionContextFactory getEcf() { return ecf; }
+	ExecutionContextFactory getEcf() {
+		return ecf;
+	}
 }

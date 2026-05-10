@@ -14,5 +14,5 @@
 package org.moqui.impl.screen;
 
 public interface ScreenWidgetRender {
-    void render(ScreenWidgets widgets, ScreenRenderImpl sri);
+	void render(ScreenWidgets widgets, ScreenRenderImpl sri);
 }

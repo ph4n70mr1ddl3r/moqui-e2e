@@ -1,0 +1,25 @@
+import com.diffplug.gradle.spotless.SpotlessPlugin
+
+initscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'com.diffplug.spotless:spotless-plugin-gradle:6.25.0'
+    }
+}
+
+allprojects {
+    plugins.withType(JavaPlugin) {
+        if (!project.plugins.hasPlugin(SpotlessPlugin)) {
+            project.apply plugin: SpotlessPlugin
+        }
+        project.spotless {
+            java {
+                removeUnusedImports()
+                eclipse()
+            }
+        }
+    }
+}

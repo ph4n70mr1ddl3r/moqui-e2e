@@ -15,11 +15,21 @@ package org.moqui.context;
 
 import org.apache.shiro.authc.AuthenticationException;
 
-/** Thrown when user's password is correct but account requires second factor authentication. */
+/**
+ * Thrown when user's password is correct but account requires second factor
+ * authentication.
+ */
 public class SecondFactorRequiredException extends AuthenticationException {
-    public SecondFactorRequiredException() { super(); }
-    public SecondFactorRequiredException(String str) { super(str); }
-    public SecondFactorRequiredException(Throwable nested) { super(nested); }
-    public SecondFactorRequiredException(String str, Throwable nested) { super(str, nested); }
+	public SecondFactorRequiredException() {
+		super();
+	}
+	public SecondFactorRequiredException(String str) {
+		super(str);
+	}
+	public SecondFactorRequiredException(Throwable nested) {
+		super(nested);
+	}
+	public SecondFactorRequiredException(String str, Throwable nested) {
+		super(str, nested);
+	}
 }
-

@@ -18,8 +18,8 @@ import org.moqui.BaseException;
 import java.io.Writer;
 
 public interface TemplateRenderer {
-    TemplateRenderer init(ExecutionContextFactory ecf);
-    void render(String location, Writer writer) throws BaseException;
-    String stripTemplateExtension(String fileName);
-    void destroy();
+	TemplateRenderer init(ExecutionContextFactory ecf);
+	void render(String location, Writer writer) throws BaseException;
+	String stripTemplateExtension(String fileName);
+	void destroy();
 }

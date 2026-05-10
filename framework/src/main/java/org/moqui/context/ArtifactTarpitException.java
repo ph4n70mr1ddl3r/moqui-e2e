@@ -18,14 +18,20 @@ import org.moqui.BaseArtifactException;
 /** Thrown when artifact tarpit is hit, too many uses of artifact. */
 public class ArtifactTarpitException extends BaseArtifactException {
 
-    private Integer retryAfterSeconds = null;
+	private Integer retryAfterSeconds = null;
 
-    public ArtifactTarpitException(String str) { super(str); }
-    public ArtifactTarpitException(String str, Throwable nested) { super(str, nested); }
-    public ArtifactTarpitException(String str, Integer retryAfterSeconds) {
-        super(str);
-        this.retryAfterSeconds = retryAfterSeconds;
-    }
+	public ArtifactTarpitException(String str) {
+		super(str);
+	}
+	public ArtifactTarpitException(String str, Throwable nested) {
+		super(str, nested);
+	}
+	public ArtifactTarpitException(String str, Integer retryAfterSeconds) {
+		super(str);
+		this.retryAfterSeconds = retryAfterSeconds;
+	}
 
-    public Integer getRetryAfterSeconds() { return retryAfterSeconds; }
+	public Integer getRetryAfterSeconds() {
+		return retryAfterSeconds;
+	}
 }

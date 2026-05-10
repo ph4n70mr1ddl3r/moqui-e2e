@@ -28,60 +28,65 @@ import java.util.Map;
 
 @CompileStatic
 public class ScriptServiceRunner implements ServiceRunner {
-    protected static final Logger logger = LoggerFactory.getLogger(ScriptServiceRunner.class);
-    private ExecutionContextFactoryImpl ecfi = null;
+	protected static final Logger logger = LoggerFactory.getLogger(ScriptServiceRunner.class);
+	private ExecutionContextFactoryImpl ecfi = null;
 
-    public ScriptServiceRunner() { }
+	public ScriptServiceRunner() {
+	}
 
-    @Override
-    public ServiceRunner init(ServiceFacadeImpl sfi) {
-        ecfi = sfi.ecfi;
-        return this;
-    }
+	@Override
+	public ServiceRunner init(ServiceFacadeImpl sfi) {
+		ecfi = sfi.ecfi;
+		return this;
+	}
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> runService(ServiceDefinition sd, Map<String, Object> parameters) {
-        ExecutionContextImpl ec = ecfi.getEci();
-        ContextStack cs = ec.contextStack;
+	@Override
+	@SuppressWarnings("unchecked")
+	public Map<String, Object> runService(ServiceDefinition sd, Map<String, Object> parameters) {
+		ExecutionContextImpl ec = ecfi.getEci();
+		ContextStack cs = ec.contextStack;
 
-        // push the entire context to isolate the context for the service call
-        cs.pushContext();
-        try {
-            // now add the parameters to this service call; copy instead of pushing, faster with newer ContextStack
-            cs.putAll(parameters);
-            // we have an empty context so add the ec
-            cs.put("ec", ec);
-            // add a convenience Map to explicitly put results in
-            Map<String, Object> autoResult = new HashMap<>();
-            cs.put("result", autoResult);
+		// push the entire context to isolate the context for the service call
+		cs.pushContext();
+		try {
+			// now add the parameters to this service call; copy instead of pushing, faster
+			// with newer ContextStack
+			cs.putAll(parameters);
+			// we have an empty context so add the ec
+			cs.put("ec", ec);
+			// add a convenience Map to explicitly put results in
+			Map<String, Object> autoResult = new HashMap<>();
+			cs.put("result", autoResult);
 
-            Object result = ec.getResource().script(sd.location, sd.method);
+			Object result = ec.getResource().script(sd.location, sd.method);
 
-            if (result instanceof Map) {
-                return (Map<String, Object>) result;
-            } else {
-                combineResults(sd, autoResult, cs.getCombinedMap());
-                return autoResult;
-            }
-        } finally {
-            // pop the entire context to get back to where we were before isolating the context with pushContext
-            cs.popContext();
-        }
-    }
-    static void combineResults(ServiceDefinition sd, Map<String, Object> autoResult, Map<String, Object> csMap) {
-        // if there are fields in ec.context that match out-parameters but that aren't in the result, set them
-        boolean autoResultUsed = autoResult.size() > 0;
-        String[] outParameterNames = sd.outParameterNameArray;
-        int outParameterNamesSize = outParameterNames.length;
-        for (int i = 0; i < outParameterNamesSize; i++) {
-            String outParameterName = outParameterNames[i];
-            Object outValue = csMap.get(outParameterName);
-            if ((!autoResultUsed || !autoResult.containsKey(outParameterName)) && outValue != null)
-                autoResult.put(outParameterName, outValue);
-        }
-    }
+			if (result instanceof Map) {
+				return (Map<String, Object>) result;
+			} else {
+				combineResults(sd, autoResult, cs.getCombinedMap());
+				return autoResult;
+			}
+		} finally {
+			// pop the entire context to get back to where we were before isolating the
+			// context with pushContext
+			cs.popContext();
+		}
+	}
+	static void combineResults(ServiceDefinition sd, Map<String, Object> autoResult, Map<String, Object> csMap) {
+		// if there are fields in ec.context that match out-parameters but that aren't
+		// in the result, set them
+		boolean autoResultUsed = autoResult.size() > 0;
+		String[] outParameterNames = sd.outParameterNameArray;
+		int outParameterNamesSize = outParameterNames.length;
+		for (int i = 0; i < outParameterNamesSize; i++) {
+			String outParameterName = outParameterNames[i];
+			Object outValue = csMap.get(outParameterName);
+			if ((!autoResultUsed || !autoResult.containsKey(outParameterName)) && outValue != null)
+				autoResult.put(outParameterName, outValue);
+		}
+	}
 
-    @Override
-    public void destroy() { }
+	@Override
+	public void destroy() {
+	}
 }

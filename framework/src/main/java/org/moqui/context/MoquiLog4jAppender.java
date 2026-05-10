@@ -24,46 +24,46 @@ import org.apache.logging.log4j.core.config.plugins.PluginElement;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.moqui.Moqui;
 
-@Plugin(name="MoquiLog4jAppender", category="Core", elementType="appender", printObject=true)
+@Plugin(name = "MoquiLog4jAppender", category = "Core", elementType = "appender", printObject = true)
 public final class MoquiLog4jAppender extends AbstractAppender {
 
-    // private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    // private final Lock readLock = rwLock.readLock();
+	// private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+	// private final Lock readLock = rwLock.readLock();
 
-    protected MoquiLog4jAppender(String name, Filter filter, Layout<? extends Serializable> layout,
-                                 final boolean ignoreExceptions, final Property[] properties) {
-        super(name, filter, layout, ignoreExceptions, properties);
-    }
+	protected MoquiLog4jAppender(String name, Filter filter, Layout<? extends Serializable> layout,
+			final boolean ignoreExceptions, final Property[] properties) {
+		super(name, filter, layout, ignoreExceptions, properties);
+	}
 
-    @Override
-    public void append(LogEvent event) {
-        ExecutionContextFactory ecf = Moqui.getExecutionContextFactory();
-        // ECF may not yet be initialized
-        if (ecf == null) return;
-        List<LogEventSubscriber> subscribers = ecf.getLogEventSubscribers();
-        int subscribersSize = subscribers.size();
-        for (int i = 0; i < subscribersSize; i++) {
-            LogEventSubscriber subscriber = subscribers.get(i);
-            subscriber.process(event);
-        }
-        /*
-        readLock.lock();
-        try {
-            final String message = (String) getLayout().toSerializable(event);
-            System.out.write(message);
-        } catch (Exception e) {
-            if (!ignoreExceptions()) { throw new AppenderLoggingException(e); }
-        } finally {
-            readLock.unlock();
-        }
-        */
-    }
+	@Override
+	public void append(LogEvent event) {
+		ExecutionContextFactory ecf = Moqui.getExecutionContextFactory();
+		// ECF may not yet be initialized
+		if (ecf == null)
+			return;
+		List<LogEventSubscriber> subscribers = ecf.getLogEventSubscribers();
+		int subscribersSize = subscribers.size();
+		for (int i = 0; i < subscribersSize; i++) {
+			LogEventSubscriber subscriber = subscribers.get(i);
+			subscriber.process(event);
+		}
+		/*
+		 * readLock.lock(); try { final String message = (String)
+		 * getLayout().toSerializable(event); System.out.write(message); } catch
+		 * (Exception e) { if (!ignoreExceptions()) { throw new
+		 * AppenderLoggingException(e); } } finally { readLock.unlock(); }
+		 */
+	}
 
-    @PluginFactory
-    public static MoquiLog4jAppender createAppender(@PluginAttribute("name") String name,
-                                                    @PluginElement("Filter") final Filter filter) {
-        // not using Layout config, let subscribers choose: @PluginElement("Layout") Layout<? extends Serializable> layout
-        if (name == null) { LOGGER.error("No name provided for MoquiLog4jAppender"); return null; }
-        return new MoquiLog4jAppender(name, filter, null, true, null);
-    }
+	@PluginFactory
+	public static MoquiLog4jAppender createAppender(@PluginAttribute("name") String name,
+			@PluginElement("Filter") final Filter filter) {
+		// not using Layout config, let subscribers choose: @PluginElement("Layout")
+		// Layout<? extends Serializable> layout
+		if (name == null) {
+			LOGGER.error("No name provided for MoquiLog4jAppender");
+			return null;
+		}
+		return new MoquiLog4jAppender(name, filter, null, true, null);
+	}
 }

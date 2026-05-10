@@ -15,9 +15,11 @@ package org.moqui.context;
 
 import org.moqui.BaseArtifactException;
 
-import java.util.Deque;
-
 public class WebMediaTypeException extends BaseArtifactException {
-    public WebMediaTypeException(String str) { super(str); }
-    public WebMediaTypeException(String str, Throwable nested) { super(str, nested); }
+	public WebMediaTypeException(String str) {
+		super(str);
+	}
+	public WebMediaTypeException(String str, Throwable nested) {
+		super(str, nested);
+	}
 }

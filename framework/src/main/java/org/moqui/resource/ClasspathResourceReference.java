@@ -20,48 +20,60 @@ import java.io.IOException;
 import java.io.InputStream;
 
 public class ClasspathResourceReference extends UrlResourceReference {
-    private String strippedLocation;
+	private String strippedLocation;
 
-    public ClasspathResourceReference() { super(); }
+	public ClasspathResourceReference() {
+		super();
+	}
 
-    @Override public ResourceReference init(String location) {
-        strippedLocation = ResourceReference.stripLocationPrefix(location);
-        // first try the current thread's context ClassLoader
-        locationUrl = Thread.currentThread().getContextClassLoader().getResource(strippedLocation);
-        // next try the ClassLoader that loaded this class
-        if (locationUrl == null) locationUrl = this.getClass().getClassLoader().getResource(strippedLocation);
-        // no luck? try the system ClassLoader
-        if (locationUrl == null) locationUrl = ClassLoader.getSystemResource(strippedLocation);
-        // if the URL was found this way then it exists, so remember that
-        if (locationUrl != null) {
-            exists = true;
-            isFileProtocol = "file".equals(locationUrl.getProtocol());
-        }
+	@Override
+	public ResourceReference init(String location) {
+		strippedLocation = ResourceReference.stripLocationPrefix(location);
+		// first try the current thread's context ClassLoader
+		locationUrl = Thread.currentThread().getContextClassLoader().getResource(strippedLocation);
+		// next try the ClassLoader that loaded this class
+		if (locationUrl == null)
+			locationUrl = this.getClass().getClassLoader().getResource(strippedLocation);
+		// no luck? try the system ClassLoader
+		if (locationUrl == null)
+			locationUrl = ClassLoader.getSystemResource(strippedLocation);
+		// if the URL was found this way then it exists, so remember that
+		if (locationUrl != null) {
+			exists = true;
+			isFileProtocol = "file".equals(locationUrl.getProtocol());
+		}
 
-        return this;
-    }
+		return this;
+	}
 
-    @Override public ResourceReference createNew(String location) {
-        ClasspathResourceReference resRef = new ClasspathResourceReference();
-        resRef.init(location);
-        return resRef;
-    }
+	@Override
+	public ResourceReference createNew(String location) {
+		ClasspathResourceReference resRef = new ClasspathResourceReference();
+		resRef.init(location);
+		return resRef;
+	}
 
-    @Override public InputStream openStream() {
-        if (locationUrl == null) throw new IllegalStateException("Classpath Resource not found at " + strippedLocation);
-        try {
-            return locationUrl.openStream();
-        } catch (FileNotFoundException e) {
-            return null;
-        } catch (IOException e) {
-            throw new BaseException("Error opening stream for " + locationUrl.toString(), e);
-        }
-    }
+	@Override
+	public InputStream openStream() {
+		if (locationUrl == null)
+			throw new IllegalStateException("Classpath Resource not found at " + strippedLocation);
+		try {
+			return locationUrl.openStream();
+		} catch (FileNotFoundException e) {
+			return null;
+		} catch (IOException e) {
+			throw new BaseException("Error opening stream for " + locationUrl.toString(), e);
+		}
+	}
 
-    @Override public boolean getExists() {
-        // only count exists if true
-        return exists != null && exists;
-    }
+	@Override
+	public boolean getExists() {
+		// only count exists if true
+		return exists != null && exists;
+	}
 
-    @Override public String getLocation() { return "classpath://" + strippedLocation; }
+	@Override
+	public String getLocation() {
+		return "classpath://" + strippedLocation;
+	}
 }

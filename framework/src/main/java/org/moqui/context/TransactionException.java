@@ -19,6 +19,10 @@ import org.moqui.BaseArtifactException;
  * TransactionException
  */
 public class TransactionException extends BaseArtifactException {
-    public TransactionException(String str) { super(str); }
-    public TransactionException(String str, Throwable nested) { super(str, nested); }
+	public TransactionException(String str) {
+		super(str);
+	}
+	public TransactionException(String str, Throwable nested) {
+		super(str, nested);
+	}
 }
